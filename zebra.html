@@ -1157,10 +1157,7 @@ const UI = (() => {
  * Zebra DataWedge (and USB scanners) "type" the barcode very fast and finish
  * with Enter (some send Tab). Two things are handled here:
  *
- *  1. capture(onCode) — catches every scan, whatever box has focus (or none).
- *                       The barcode never stays in that box: a search box is
- *                       emptied, any other box gets its old value back. Then
- *                       the code goes to onCode (the app opens the item).
+ *  1. listen(onCode)  — catches a scan when no text box has focus.
  *  2. burstGuard()    — tells a scan apart from a person typing a quantity,
  *                       so a barcode never lands in the quantity box.
  * ========================================================================== */
@@ -1168,77 +1165,23 @@ const UI = (() => {
 const Scanner = (() => {
 
   const MIN_CHARS = 6;      // a scan is at least this many characters…
-  const MAX_GAP_MS = 60;    // …each arriving this fast after the last (quantity guard)
-  /* capture(): a burst = keys less than BURST_BREAK_MS apart; it is a scan when it has
-     MIN_CHARS+ keys at an AVERAGE under SCAN_AVG_MS each (a person can't keep that up;
-     averaging tolerates a busy device pausing for a moment in the middle of a scan). */
-  const BURST_BREAK_MS = 150;
-  const SCAN_AVG_MS = 40;
+  const MAX_GAP_MS = 60;    // …each arriving this fast after the last
 
-  /** What the focused box held before the scan started typing into it. */
-  function snapshot() {
-    const el = document.activeElement;
-    if (!el || !el.matches('input, textarea')) return null;
-    return { el, id: el.id, value: el.value, replace: el.type === 'search' || el.dataset.scan === 'replace' };
-  }
-  /** Take the barcode back out of that box (the screen may have redrawn it, so find it by id). */
-  function putBack(snap) {
-    if (!snap) return;
-    const el = (snap.id && document.getElementById(snap.id)) || (snap.el.isConnected ? snap.el : null);
-    if (!el) return;
-    el.value = snap.replace ? '' : snap.value;
-    el.dispatchEvent(new Event('input', { bubbles: true }));     // the app's state follows the box
-  }
-
-  /**
-   * Every scan, wherever the focus is. Runs before the page's own handlers, so the
-   * scan's Enter never reaches a search box or a form. `isPaused()` = leave keys alone
-   * (e.g. the Zebra quantity sheet has its own guard).
-   *
-   * Characters are counted from two places, because Android Chrome only tells the
-   * key on `keydown` when no box is focused; inside a box it says "Unidentified"
-   * and the text arrives as `beforeinput` (sometimes the whole barcode at once).
-   */
-  function capture(onCode, { isPaused = () => false } = {}) {
-    let buffer = '', first = 0, last = 0, snap = null;
-    let keyCh = '', keyAt = 0;                     // the last char already counted from keydown
-
-    function add(text, now) {
-      if (now - last > BURST_BREAK_MS) { buffer = ''; first = now; snap = snapshot(); }
-      buffer += text; last = now;
-    }
-
+  /** Scans typed while no input is focused (the page itself has focus). */
+  function listen(onCode, { isPaused = () => false } = {}) {
+    let buffer = '', last = 0;
     document.addEventListener('keydown', e => {
-      if (isPaused()) { buffer = ''; return; }
+      if (isPaused() || document.activeElement?.matches('input, select, textarea')) return;
       const now = performance.now();
-      const isEnd = e.key === 'Enter' || e.key === 'Tab' || e.keyCode === 13 || e.keyCode === 9;
-      if (!isEnd) {
-        const ch = e.key && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey ? e.key : null;
-        if (ch && /^[0-9A-Za-z\-_. ]$/.test(ch)) { add(ch, now); keyCh = ch; keyAt = now; return; }
-        if (e.key === 'Unidentified' || e.keyCode === 229 || e.key === 'Shift') return;   // text comes via beforeinput
-        buffer = '';
-        return;
-      }
-      const code = buffer.trim();
-      const fast = buffer.length > 1 && (last - first) / (buffer.length - 1) < SCAN_AVG_MS;
-      if (code.length >= MIN_CHARS && fast && now - last < BURST_BREAK_MS * 2) {
+      if (/^[0-9A-Za-z\-]$/.test(e.key)) {
+        if (now - last > MAX_GAP_MS * 3) buffer = '';
+        buffer += e.key; last = now;
+      } else if ((e.key === 'Enter' || e.key === 'Tab') && buffer.length >= MIN_CHARS) {
         e.preventDefault();
-        e.stopImmediatePropagation();
-        buffer = '';
-        putBack(snap);
+        const code = buffer; buffer = '';
         onCode(code);
-      } else buffer = '';
-    }, true);
-
-    document.addEventListener('beforeinput', e => {
-      if (isPaused() || !e.data || !/^insert(Text|ReplacementText|FromPaste)?$/.test(e.inputType)) return;
-      const now = performance.now();
-      if (e.data === keyCh && now - keyAt < 50) return;          // same char, already counted on keydown
-      if (!/^[0-9A-Za-z\-_. ]+$/.test(e.data)) { buffer = ''; return; }
-      if (e.data.length > 1) {                                    // whole barcode at once: its own burst
-        snap = snapshot(); buffer = e.data; first = now - 1; last = now;
-      } else add(e.data, now);
-    }, true);
+      }
+    });
   }
 
   /**
@@ -1264,7 +1207,7 @@ const Scanner = (() => {
     };
   }
 
-  return { capture, burstGuard, MIN_CHARS };
+  return { listen, burstGuard, MIN_CHARS };
 })();
 </script>
 <script>
@@ -1322,8 +1265,8 @@ const Scanner = (() => {
 
   /** Search box with live results (used by سحب and إرجاع). */
   /* Tapping the box opens the keyboard (normal behaviour). The box is never focused
-     automatically, so the keyboard doesn't pop up after every scan. Every scan — box
-     focused or not — is caught by Scanner.capture and goes to the current tab's onScan(). */
+     automatically, so the keyboard doesn't pop up after every scan; scans with no box
+     focused are caught by Scanner.listen and go to the current tab's onScan(). */
   function searchBox({ id, value, placeholder }) {
     return `<div class="search"><span class="icon">⌕</span>
       <input id="${id}" type="search" autocomplete="off" enterkeyhint="search" placeholder="${esc(placeholder)}" value="${esc(value)}">
@@ -1733,15 +1676,12 @@ const Scanner = (() => {
     $('#doneOverlay').addEventListener('click', e => { if (e.target.id === 'doneOverlay') globalActions.closeDone(); });
     document.addEventListener('keydown', e => { if (Qty.isOpen()) Qty.onKey(e); });
 
-    /* every scan, whatever box is focused: the "saved" screen closes by itself,
-       the barcode never stays in a box, and the item opens on the current tab */
-    Scanner.capture(code => {
-      if ($('#doneOverlay').classList.contains('on')) globalActions.closeDone();
+    /* scans while no text box is focused (transfer and log tabs) */
+    Scanner.listen(code => {
       const item = Core.findByBarcode(code);
       if (!item) return UI.toast('باركود مو معروف', 'bad');
-      document.activeElement?.blur?.();             // keyboard down
       views[state.tab].onScan(item);
-    }, { isPaused: () => Qty.isOpen() || !!document.querySelector('#syncCode.on') });
+    }, { isPaused: () => Qty.isOpen() || $('#doneOverlay').classList.contains('on') });
 
     /* a change came from the other device: redraw, unless someone is in the middle of something */
     Sync.onUpdate(() => {
