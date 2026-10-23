@@ -1140,7 +1140,10 @@ const UI = (() => {
  * Zebra DataWedge (and USB scanners) "type" the barcode very fast and finish
  * with Enter (some send Tab). Two things are handled here:
  *
- *  1. listen(onCode)  — catches a scan when no text box has focus.
+ *  1. capture(onCode) — catches every scan, whatever box has focus (or none).
+ *                       The barcode never stays in that box: a search box is
+ *                       emptied, any other box gets its old value back. Then
+ *                       the code goes to onCode (the app opens the item).
  *  2. burstGuard()    — tells a scan apart from a person typing a quantity,
  *                       so a barcode never lands in the quantity box.
  * ========================================================================== */
@@ -1148,23 +1151,56 @@ const UI = (() => {
 const Scanner = (() => {
 
   const MIN_CHARS = 6;      // a scan is at least this many characters…
-  const MAX_GAP_MS = 60;    // …each arriving this fast after the last
+  const MAX_GAP_MS = 60;    // …each arriving this fast after the last (quantity guard)
+  /* capture(): a burst = keys less than BURST_BREAK_MS apart; it is a scan when it has
+     MIN_CHARS+ keys at an AVERAGE under SCAN_AVG_MS each (a person can't keep that up;
+     averaging tolerates a busy device pausing for a moment in the middle of a scan). */
+  const BURST_BREAK_MS = 150;
+  const SCAN_AVG_MS = 40;
 
-  /** Scans typed while no input is focused (the page itself has focus). */
-  function listen(onCode, { isPaused = () => false } = {}) {
-    let buffer = '', last = 0;
+  /** What the focused box held before the scan started typing into it. */
+  function snapshot() {
+    const el = document.activeElement;
+    if (!el || !el.matches('input, textarea')) return null;
+    return { el, id: el.id, value: el.value, replace: el.type === 'search' || el.dataset.scan === 'replace' };
+  }
+  /** Take the barcode back out of that box (the screen may have redrawn it, so find it by id). */
+  function putBack(snap) {
+    if (!snap) return;
+    const el = (snap.id && document.getElementById(snap.id)) || (snap.el.isConnected ? snap.el : null);
+    if (!el) return;
+    el.value = snap.replace ? '' : snap.value;
+    el.dispatchEvent(new Event('input', { bubbles: true }));     // the app's state follows the box
+  }
+
+  /**
+   * Every scan, wherever the focus is. Runs before the page's own handlers, so the
+   * scan's Enter never reaches a search box or a form. `isPaused()` = leave keys alone
+   * (e.g. the Zebra quantity sheet has its own guard).
+   */
+  function capture(onCode, { isPaused = () => false } = {}) {
+    let buffer = '', first = 0, last = 0, snap = null;
     document.addEventListener('keydown', e => {
-      if (isPaused() || document.activeElement?.matches('input, select, textarea')) return;
+      if (isPaused()) { buffer = ''; return; }
       const now = performance.now();
-      if (/^[0-9A-Za-z\-]$/.test(e.key)) {
-        if (now - last > MAX_GAP_MS * 3) buffer = '';
-        buffer += e.key; last = now;
-      } else if ((e.key === 'Enter' || e.key === 'Tab') && buffer.length >= MIN_CHARS) {
-        e.preventDefault();
-        const code = buffer; buffer = '';
-        onCode(code);
+      const ch = e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey ? e.key : null;
+      if (ch && /^[0-9A-Za-z\-_. ]$/.test(ch)) {
+        if (now - last > BURST_BREAK_MS) { buffer = ''; first = now; snap = snapshot(); }
+        buffer += ch; last = now;
+        return;
       }
-    });
+      const code = buffer.trim();
+      const fast = buffer.length > 1 && (last - first) / (buffer.length - 1) < SCAN_AVG_MS;
+      if ((e.key === 'Enter' || e.key === 'Tab') && code.length >= MIN_CHARS && fast && now - last < BURST_BREAK_MS * 2) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        buffer = '';
+        putBack(snap);
+        onCode(code);
+        return;
+      }
+      if (e.key !== 'Shift') buffer = '';
+    }, true);
   }
 
   /**
@@ -1190,7 +1226,7 @@ const Scanner = (() => {
     };
   }
 
-  return { listen, burstGuard, MIN_CHARS };
+  return { capture, burstGuard, MIN_CHARS };
 })();
 </script>
 <script>
@@ -1485,7 +1521,7 @@ const Exports = (() => {
       return `<div class="view desk">
         <div class="panel">
           <div class="panel-head" style="display:block">
-            <div class="big-search"><span class="icon">⌕</span><input id="deskSearch" autocomplete="off" placeholder="امسح بالسكانر، أو اكتب الاسم أو SKU، واضغط Enter" value="${esc(s.query)}"><span class="hint">Enter = أول نتيجة</span></div>
+            <div class="big-search"><span class="icon">⌕</span><input id="deskSearch" data-scan="replace" autocomplete="off" placeholder="امسح بالسكانر، أو اكتب الاسم أو SKU، واضغط Enter" value="${esc(s.query)}"><span class="hint">Enter = أول نتيجة</span></div>
             <div class="chips" style="margin-top:10px">${sectionChips(s.section, 'section')}<button class="chip ${s.lowOnly ? 'on' : ''}" data-action="lowOnly" style="border-color:#6a2a26">⚠ تحت الحد فقط</button></div>
             ${s.section === 'فتنك' ? `<div class="chips" style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)"><span style="font-size:12px;color:var(--muted);align-self:center">نوع الفتنك:</span>
               <button class="chip ${!s.group ? 'on' : ''}" data-action="group" data-name="">الكل</button>${CONFIG.fittingGroups.map(g => `<button class="chip ${g === s.group ? 'on' : ''}" data-action="group" data-name="${g}">${g}</button>`).join('')}</div>` : ''}
@@ -1535,6 +1571,7 @@ const Exports = (() => {
 
     add(item) {
       const s = this.s;
+      this.syncQuantities();                       // keep a quantity typed but not yet confirmed
       if (s.mode === 'return') { s.returnSku = item.sku; return render({ focus: '#deskSearch' }); }
       const line = s.cart.find(l => l.sku === item.sku);
       if (line) line.qty++;
@@ -1602,6 +1639,7 @@ const Exports = (() => {
       returnOne: d => desk.returnOne(d.id),
       allReturns: () => { desk.s.returnSku = null; render(); },
     },
+    onScan(item) { desk.s.query = ''; desk.add(item); },
     changes: {
       cartQty: (d, el) => { const l = desk.s.cart[d.k]; if (l) { l.qty = Math.max(1, int(el.value) || 1); el.value = l.qty; } },
     },
@@ -1626,7 +1664,7 @@ const Exports = (() => {
       return `<div class="view panel">
         <div class="panel-head">
           <select class="field" data-change="section">${['الكل', ...CONFIG.sections.map(x => x.name)].map(n => `<option ${n === s.section ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
-          <input class="field" id="tableSearch" style="width:240px" placeholder="⌕ اسم، SKU، باركود أو مكان" value="${esc(s.query)}">
+          <input class="field" id="tableSearch" data-scan="replace" style="width:240px" placeholder="⌕ اسم، SKU، باركود أو مكان" value="${esc(s.query)}">
           ${[['all', 'الكل'], ['low', 'تحت الحد'], ['buy', 'ماكو بطيران']].map(([k, t]) => `<button class="chip ${s.filter === k ? 'on' : ''}" data-action="filter" data-filter="${k}">${t} <small>${counts[k]}</small></button>`).join('')}
           <div class="end"><span style="color:var(--muted);font-size:12.5px">الحركات باسم:</span>${workerPicker(s.worker, 'worker', true)}</div>
         </div>
@@ -1651,6 +1689,11 @@ const Exports = (() => {
     bind() {
       const input = $('#tableSearch');
       input.oninput = () => { this.s.query = input.value; this.s.show = 40; render({ focus: '#tableSearch' }); };
+    },
+    /** Scan → show that item's row, cursor in its quantity box. */
+    onScan(item) {
+      Object.assign(table.s, { query: item.sku, filter: 'all', section: 'الكل', show: 40, flash: item.sku });
+      render({ focus: '#quick-' + item.sku });
     },
 
     actions: {
@@ -1704,7 +1747,7 @@ const Exports = (() => {
           <div class="stat"><div class="l">ماكو بطيران</div><div class="n" style="color:var(--bad)">${buy.length}<small> تحتاج شراء</small></div></div>
         </div>
         <div class="panel">
-          <div class="panel-head"><input class="field" id="transferSearch" style="width:240px" placeholder="⌕ اسم أو SKU" value="${esc(s.query)}">
+          <div class="panel-head"><input class="field" id="transferSearch" data-scan="replace" style="width:240px" placeholder="⌕ اسم أو SKU" value="${esc(s.query)}">
             <span style="color:var(--muted);font-size:12.5px;margin-inline-start:10px">منو جابها؟</span>${workerPicker(s.worker, 'worker', true)}
             <div class="end"><button class="btn" data-action="printList">⬇ قائمة للعامل</button>
               <button class="btn green" data-action="moveAll" ${chosen.length && s.worker ? '' : 'disabled'}>${!s.worker ? 'اختار منو جابها' : `✓ سجّل نقل المحدد (${chosen.length} مادة · ${total} قطعة)`}</button></div></div>
@@ -1746,6 +1789,7 @@ const Exports = (() => {
       const input = $('#transferSearch');
       input.oninput = () => { this.s.query = input.value; render({ focus: '#transferSearch' }); };
     },
+    onScan(item) { transfer.syncQuantities(); transfer.s.query = item.sku; render(); },
 
     actions: {
       worker: d => { transfer.syncQuantities(); transfer.s.worker = d.worker; render(); },
@@ -1764,6 +1808,7 @@ const Exports = (() => {
   /* ---------- daftra: what still has to be entered by hand ---------- */
   const daftra = {
     get s() { return state.daftra; },
+    onScan(item) { UI.toast(`${item.name} · الرئيسي ${item.main} · طيران ${item.tayaran}`); },
 
     html() {
       const s = this.s, groups = Core.daftraPending(), pending = Core.pendingDaftraCount(), last = Core.daftraVouchers()[0];
@@ -1843,7 +1888,10 @@ const Exports = (() => {
     views[state.tab].bind();
     scrollTo(0, pageY);
     $$(scrollers).forEach((e, k) => { if (inner[k] != null) e.scrollTop = inner[k]; });
-    if (focus) { const el = $(focus); if (el) { el.focus(); el.setSelectionRange?.(el.value.length, el.value.length); } }
+    if (focus) {
+      const el = $(focus);
+      if (el) { el.focus(); if (el.type !== 'number') el.setSelectionRange?.(el.value.length, el.value.length); }   // number boxes have no cursor position
+    }
     state.table.flash = null;
   }
 
@@ -1901,6 +1949,14 @@ const Exports = (() => {
       const fn = views[state.tab].changes?.[e.target.dataset.change];
       if (fn) fn(e.target.dataset, e.target);
     });
+    /* every scan, whatever box is focused: the barcode never stays in a box,
+       and the item goes to the current tab (desk: into the slip) */
+    Scanner.capture(code => {
+      const item = Core.findByBarcode(code);
+      if (!item) return UI.toast('باركود مو معروف: ' + code, 'bad');
+      views[state.tab].onScan(item);
+    }, { isPaused: () => !!document.querySelector('#syncCode.on') });
+
     main.addEventListener('keydown', e => {
       const name = e.target.dataset?.enter;
       if (e.key === 'Enter' && name) { e.preventDefault(); views[state.tab].actions[name](e.target.dataset, e.target); }
