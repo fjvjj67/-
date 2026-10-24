@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>الرئيسي · لابتوب</title>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
-<style>
+<style id="css-dark">
 /* ============================================================================
  * AZAWI · Laptop app — styles
  * Wide screen, dark, same colours as the Zebra app.
@@ -37,6 +37,7 @@ code { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted
 .tabs { display: flex; gap: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 99px; padding: 4px; position: relative; }
 .tabs button { position: relative; z-index: 1; padding: 7px 16px; border-radius: 99px; font-weight: 700; color: var(--muted); transition: color .25s; }
 .tabs button.on { color: #fff; }
+.tabs .theme-btn { padding: 7px 12px; font-size: 16px; }   /* ☀ / 🌙 (theme.js) */
 .tabs .pill { position: absolute; top: 4px; bottom: 4px; border-radius: 99px; background: var(--brand); transition: all .35s cubic-bezier(.5, .1, .2, 1); }
 .count { background: var(--bad); color: #fff; border-radius: 99px; padding: 0 7px; font-size: 11.5px; margin-inline-start: 4px; }
 .count:empty { display: none; }
@@ -185,6 +186,14 @@ tr.detail td { background: #171210; color: var(--muted); font-size: 12.5px; }
 @media (max-width: 1100px) { .desk { grid-template-columns: 1fr; } .slip { position: static; } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
+/* ---- view-only code (body.readonly is set by sync.js) ---- */
+body.readonly .tabs [data-tab="transfer"], body.readonly .tabs [data-tab="daftra"] { display: none; }
+body.readonly .slip > .panel:first-child { display: none; }                        /* the slip / cart */
+body.readonly #main table th:last-child, body.readonly #main table td:last-child { display: none; }   /* quick moves */
+body.readonly #main .panel-head .end .workers { display: none; }
+body.readonly [data-change="location"], body.readonly [data-change="min"] { border-color: transparent; background: transparent; pointer-events: none; }
+body.readonly #main .panel-head .end > span { display: none; }
+
 /* ---- sync: status pill + one-time device code (both apps) ---- */
 .sync { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line);
   background: var(--card); color: var(--muted); white-space: nowrap; vertical-align: middle; line-height: 1.6; }
@@ -204,6 +213,247 @@ tr.detail td { background: #171210; color: var(--muted); font-size: 12.5px; }
 .sync-code .err { color: var(--bad); min-height: 1.2em; }
 .sync-code button { background: var(--brand); color: #fff; font-weight: 800; font-size: 16px; padding: 12px; border-radius: 10px; border: 0; }
 .sync-code button:disabled { opacity: .5; }
+
+/* ---- menu under the status pill: who + sign out ---- */
+.sync { cursor: pointer; }
+.sync-menu { position: fixed; z-index: 250; min-width: 230px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 14px; box-shadow: 0 12px 30px #0008; padding: 6px; }
+.sync-menu .acct { padding: 10px 12px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.sync-menu .acct b { display: block; font-size: 15px; color: var(--text); }
+.sync-menu .acct small { color: var(--muted); font-size: 12px; }
+.sync-menu .warn { margin: 6px; padding: 9px 10px; border-radius: 10px; background: #45301a; color: #f6dfb8; font-size: 12.5px; line-height: 1.5; }
+.sync-menu button { display: block; width: 100%; text-align: right; padding: 11px 12px; border-radius: 10px; font-size: 15px;
+  font-weight: 700; background: none; border: 0; color: var(--bad); cursor: pointer; }
+.sync-menu button:disabled { opacity: .4; cursor: default; }
+</style>
+<style id="css-light" media="not all">
+/* ============================================================================
+ * AZAWI · Laptop app — styles
+ * Wide screen, dark, same colours as the Zebra app.
+ * ========================================================================== */
+
+/* ---- tokens ---- */
+:root {
+  --bg: #ffffff; --card: #f4f6f8; --card-2: #e9edf1; --line: #d3d9e0; --field: #ffffff;
+  --text: #0f1419; --muted: #5f6b77; --brand: #F37221;
+  --ok: #1d9e63; --bad: #d93a31; --warn: #c98a12; --blue: #2f7fd6;
+}
+
+/* ---- base ---- */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: Cairo, system-ui, sans-serif; font-size: 14px; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; border: 0; background: none; }
+button:disabled { opacity: .4; cursor: default; }
+input[type=number] { -moz-appearance: textfield; }
+input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; }
+main { max-width: 1480px; margin: 0 auto; padding: 18px 24px 40px; }
+.view { animation: blur-in .4s ease both; }
+code { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+
+/* ---- top bar + tabs ---- */
+.topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 16px; padding: 12px 24px; background: #ffffffee; backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.brand { font-weight: 800; font-size: 17px; }
+.brand b { color: var(--brand); }
+.tabs { display: flex; gap: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 99px; padding: 4px; position: relative; }
+.tabs button { position: relative; z-index: 1; padding: 7px 16px; border-radius: 99px; font-weight: 700; color: var(--muted); transition: color .25s; }
+.tabs button.on { color: #fff; }
+.tabs .theme-btn { padding: 7px 12px; font-size: 16px; }   /* ☀ / 🌙 (theme.js) */
+.tabs .pill { position: absolute; top: 4px; bottom: 4px; border-radius: 99px; background: var(--brand); transition: all .35s cubic-bezier(.5, .1, .2, 1); }
+.count { background: var(--bad); color: #fff; border-radius: 99px; padding: 0 7px; font-size: 11.5px; margin-inline-start: 4px; }
+.count:empty { display: none; }
+.kpis { margin-inline-start: auto; color: var(--muted); font-size: 12.5px; display: flex; gap: 14px; }
+.kpis b { color: var(--text); }
+
+/* ---- panels, chips, buttons, fields ---- */
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+.panel + .panel { margin-top: 14px; }
+.panel-head { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.panel-head h3 { font-size: 15px; }
+.panel-head .end { margin-inline-start: auto; display: flex; gap: 8px; align-items: center; }
+.panel-note { padding: 10px 14px; color: var(--muted); font-size: 12.5px; line-height: 1.7; border-top: 1px solid var(--line); }
+.chip { padding: 5px 12px; border-radius: 99px; background: var(--card-2); border: 1px solid var(--line); font-weight: 700; font-size: 12.5px; color: var(--muted); }
+.chip.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.chip small { opacity: .7; }
+.chip.dim { opacity: .5; }
+.chip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-inline-end: 5px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn { padding: 7px 14px; border-radius: 10px; background: var(--card-2); border: 1px solid var(--line); font-weight: 700; font-size: 13px; white-space: nowrap; }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+.btn.green { background: #dff5ea; border-color: #9fd8bd; color: var(--ok); }
+.btn.red { background: #fde4e2; border-color: #f2aaa4; color: #b3261e; }
+.btn.blue { background: #e1eefc; border-color: #a9c9ef; color: var(--blue); }
+.btn.small { padding: 4px 10px; font-size: 12px; }
+.field { padding: 7px 11px; border-radius: 10px; background: var(--field); border: 1px solid var(--line); }
+.field:focus { outline: none; border-color: var(--brand); }
+.field.qty { width: 76px; text-align: center; font-weight: 800; }
+.field.loc { width: 96px; font-family: ui-monospace, monospace; font-size: 12.5px; text-align: center; }
+.big-search { position: relative; }
+.big-search input { width: 100%; height: 48px; padding: 0 44px 0 14px; border-radius: 14px; background: var(--field); border: 2px solid var(--brand); font-size: 15px; }
+.big-search input:focus { outline: none; }
+.big-search .icon { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--brand); font-size: 18px; }
+.big-search .hint { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 11.5px; color: var(--muted); }
+.workers { display: flex; gap: 6px; }
+.workers button { flex: 1; padding: 8px 14px; border-radius: 11px; background: var(--card-2); border: 1px solid var(--line); font-weight: 800; }
+.workers button.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.workers.compact button { padding: 5px 12px; }
+.modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--field); border-radius: 12px; padding: 4px; }
+.modes button { padding: 8px; border-radius: 9px; font-weight: 800; color: var(--muted); }
+.modes button.on.out { background: #fde4e2; color: #b3261e; }
+.modes button.on.in { background: #dff5ea; color: #136b45; }
+.modes button.on.return { background: #e1eefc; color: #1f5fa8; }
+
+/* ---- small labels ---- */
+.th { object-fit: cover; background: #fff; display: block; cursor: zoom-in; }
+.noph { display: flex; align-items: center; justify-content: center; background: var(--card-2); color: #b9c1ca; }
+.loc { font-family: ui-monospace, monospace; font-size: 12px; background: var(--card-2); border-radius: 7px; padding: 2px 7px; color: var(--warn); }
+.tag { font-size: 11.5px; border-radius: 99px; padding: 2px 9px; font-weight: 700; background: var(--card-2); color: var(--muted); white-space: nowrap; }
+.tag.ok { background: #dff5ea; color: var(--ok); }
+.tag.warn { background: #fdf0d9; color: var(--warn); }
+.tag.bad { background: #fde4e2; color: var(--bad); }
+.tag.blue { background: #e1eefc; color: var(--blue); }
+.who { font-weight: 800; font-size: 12px; border-radius: 8px; padding: 2px 8px; }
+.src { font-size: 10.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 5px; }
+.low { color: var(--bad); font-weight: 800; }
+.q.out { color: var(--bad); } .q.in { color: var(--ok); } .q.ret { color: var(--blue); }
+.item-cell { display: flex; align-items: center; gap: 10px; min-width: 220px; }
+.item-cell .th, .item-cell .noph { width: 40px; height: 40px; border-radius: 9px; flex: none; }
+.item-cell .two { display: flex; flex-direction: column; line-height: 1.3; }
+.stat { background: var(--card-2); border-radius: 14px; padding: 10px 14px; min-width: 190px; }
+.stat .l { font-size: 12px; color: var(--muted); }
+.stat .n { font-size: 28px; font-weight: 800; line-height: 1.2; }
+.stat .n small { font-size: 13px; color: var(--muted); }
+.stat.hero { background: linear-gradient(150deg, #fde6d6, #e9edf1); }
+.page-head { display: flex; gap: 14px; align-items: stretch; margin-bottom: 14px; flex-wrap: wrap; }
+.page-head .text { flex: 1; min-width: 300px; }
+.page-head h1 { font-size: 22px; }
+.page-head p { color: var(--muted); line-height: 1.7; }
+.bar { width: 90px; height: 6px; background: #0005; border-radius: 9px; overflow: hidden; margin-top: 3px; }
+.bar i { display: block; height: 100%; background: var(--bad); }
+.empty { padding: 30px; text-align: center; color: var(--muted); }
+.all-good { padding: 40px; text-align: center; color: var(--ok); font-size: 16px; font-weight: 800; }
+
+/* ---- tables ---- */
+.scroll { max-height: calc(100vh - 230px); overflow: auto; }
+table { width: 100%; border-collapse: collapse; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; text-align: right; padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; position: sticky; top: 0; background: var(--card); z-index: 1; }
+td { padding: 6px 12px; border-bottom: 1px solid #e9edf1; vertical-align: middle; }
+tr:hover td { background: #f4f6f8; }
+tr.saved td { animation: flash 1.6s ease; }
+tr.detail td { background: #ffffff; color: var(--muted); font-size: 12.5px; }
+.row-actions { display: flex; gap: 5px; align-items: center; }
+.more { padding: 10px; text-align: center; border-top: 1px solid var(--line); }
+
+/* ---- desk (tab 1) ---- */
+.desk { display: grid; grid-template-columns: 1fr 430px; gap: 16px; align-items: start; }
+.products { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 14px; max-height: calc(100vh - 250px); overflow: auto; }
+.product { background: var(--card-2); border: 1px solid var(--line); border-radius: 14px; padding: 6px; text-align: right; display: flex; flex-direction: column; transition: transform .15s, border-color .15s; position: relative; }
+.product:hover { transform: translateY(-2px); border-color: var(--brand); }
+.product .th, .product .noph { width: 100%; aspect-ratio: 1; border-radius: 10px; font-size: 26px; cursor: pointer; }
+@supports not (aspect-ratio: 1) { .product .th, .product .noph { height: 150px; } }   /* old browsers */
+.product b { font-size: 12.5px; line-height: 1.35; margin: 6px 2px 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.7em; }
+.product .stock { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); margin: 4px 2px 0; }
+.product .stock b { display: inline; margin: 0; font-size: 13px; min-height: 0; }
+.product .in-cart { position: absolute; top: 10px; left: 10px; background: var(--brand); color: #fff; font-weight: 800; border-radius: 99px; padding: 0 9px; font-size: 13px; }
+.slip { position: sticky; top: 76px; }
+.slip-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.slip-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.lines { max-height: 340px; overflow: auto; }
+.line { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #e9edf1; }
+.line .th, .line .noph { width: 44px; height: 44px; border-radius: 9px; flex: none; }
+.line .n { flex: 1; min-width: 0; }
+.line .n b { display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.line .n small { font-size: 11px; color: var(--muted); }
+.line .n small.short { color: var(--warn); font-weight: 700; }
+.line .remove { color: var(--muted); width: 28px; height: 28px; border-radius: 8px; }
+.line .remove:hover { background: #fde4e2; color: var(--bad); }
+.return-row { padding: 8px 0; border-bottom: 1px solid #e9edf1; }
+.return-row .line { border: 0; padding: 0 0 6px; }
+.slip .empty { padding: 16px 0; line-height: 1.7; font-size: 13px; }
+.total { display: flex; justify-content: space-between; font-weight: 800; }
+.save { flex: 1; padding: 13px; border-radius: 13px; font-weight: 800; font-size: 15px; }
+.save.out { background: var(--brand); color: #fff; }
+.save.in { background: var(--ok); color: #dff5ea; }
+.feed { max-height: 260px; overflow: auto; }
+.feed-row { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-bottom: 1px solid #e9edf1; font-size: 12.5px; }
+.feed-row.undone { opacity: .35; text-decoration: line-through; }
+.feed-row .th, .feed-row .noph { width: 30px; height: 30px; border-radius: 7px; flex: none; }
+.feed-row .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.feed-row .q { font-weight: 800; }
+
+/* ---- export button ---- */
+.export { position: relative; font-size: 14px; font-weight: 700; }
+.btn.excel { background: #dff5ea; border-color: #9fd8bd; color: #136b45; }
+.export-menu { position: absolute; top: 40px; right: 0; z-index: 4; min-width: 220px; background: #e9edf1; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 14px 34px #000a; overflow: hidden; }
+.export-menu button { display: block; width: 100%; text-align: right; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.export-menu button:last-child { border: 0; }
+.export-menu button:hover:not(:disabled) { background: #fde6d6; }
+
+/* ---- lightbox + toast ---- */
+#lightbox { position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: #000d; z-index: 30; display: none; align-items: center; justify-content: center; cursor: zoom-out; }
+#lightbox.on { display: flex; }
+#lightbox img { max-width: 80vw; max-height: 85vh; border-radius: 14px; background: #fff; }
+.toast { position: fixed; bottom: 22px; left: 50%; transform: translate(-50%, 90px); background: var(--text); color: var(--bg); padding: 11px 18px; border-radius: 14px; font-weight: 700; transition: transform .3s; z-index: 20; }
+.toast.on { transform: translate(-50%, 0); }
+.toast.bad { background: var(--bad); color: #fff; }
+.toast.warn { background: var(--warn); }
+
+/* ---- shown when no items are loaded yet ---- */
+.no-items { margin: 10px 14px; padding: 12px 14px; border-radius: 14px; background: #fdf0d9; color: #8a5a00; font-weight: 700; font-size: 13.5px; line-height: 1.7; text-align: center; }
+
+/* ---- motion + narrow screens ---- */
+@keyframes blur-in { from { opacity: 0; filter: blur(8px); transform: translateY(8px); } }
+@keyframes flash { 0% { background: #dff5ea; } 100% { background: transparent; } }
+@media (max-width: 1100px) { .desk { grid-template-columns: 1fr; } .slip { position: static; } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* ---- view-only code (body.readonly is set by sync.js) ---- */
+body.readonly .tabs [data-tab="transfer"], body.readonly .tabs [data-tab="daftra"] { display: none; }
+body.readonly .slip > .panel:first-child { display: none; }                        /* the slip / cart */
+body.readonly #main table th:last-child, body.readonly #main table td:last-child { display: none; }   /* quick moves */
+body.readonly #main .panel-head .end .workers { display: none; }
+body.readonly [data-change="location"], body.readonly [data-change="min"] { border-color: transparent; background: transparent; pointer-events: none; }
+body.readonly #main .panel-head .end > span { display: none; }
+
+/* ---- sync: status pill + one-time device code (both apps) ---- */
+.sync { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--card); color: var(--muted); white-space: nowrap; vertical-align: middle; line-height: 1.6; }
+.sync.online { color: var(--ok); border-color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+.sync.offline { color: var(--warn); border-color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+.sync.locked { color: var(--bad); border-color: var(--bad); }
+
+.sync-code { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 300; display: none; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, .72); padding: 16px; }
+.sync-code.on { display: flex; }
+.sync-code form { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px;
+  width: min(360px, 100%); display: grid; gap: 10px; }
+.sync-code b { font-size: 18px; }
+.sync-code p { color: var(--muted); font-size: 13px; }
+.sync-code input { font-size: 20px; letter-spacing: 2px; text-align: center; padding: 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text); font-family: ui-monospace, monospace; }
+.sync-code .err { color: var(--bad); min-height: 1.2em; }
+.sync-code button { background: var(--brand); color: #fff; font-weight: 800; font-size: 16px; padding: 12px; border-radius: 10px; border: 0; }
+.sync-code button:disabled { opacity: .5; }
+
+/* ---- menu under the status pill: who + sign out ---- */
+.sync { cursor: pointer; }
+.sync-menu { position: fixed; z-index: 250; min-width: 230px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 14px; box-shadow: 0 12px 30px #0008; padding: 6px; }
+.sync-menu .acct { padding: 10px 12px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.sync-menu .acct b { display: block; font-size: 15px; color: var(--text); }
+.sync-menu .acct small { color: var(--muted); font-size: 12px; }
+.sync-menu .warn { margin: 6px; padding: 9px 10px; border-radius: 10px; background: #fdf0d9; color: #8a5a00; font-size: 12.5px; line-height: 1.5; }
+.sync-menu button { display: block; width: 100%; text-align: right; padding: 11px 12px; border-radius: 10px; font-size: 15px;
+  font-weight: 700; background: none; border: 0; color: var(--bad); cursor: pointer; }
+.sync-menu button:disabled { opacity: .4; cursor: default; }
+
+/* ---- light-only ---- */
+.who[style*="#3a2214"]{background:#fde6d6 !important;color:#b44d0c !important}
+.who[style*="#16283d"]{background:#e1eefc !important;color:#1f5fa8 !important}
+.who[style*="#173a2b"]{background:#dff5ea !important;color:#136b45 !important}
+.who[style*="#3a1630"]{background:#fbe3f3 !important;color:#9b2a7a !important}
+[style*="#6a2a26"]{border-color:#f2aaa4 !important}
+.overlay{background:#0006 !important}
 </style>
 </head>
 <body>
@@ -214,6 +464,7 @@ tr.detail td { background: #171210; color: var(--muted); font-size: 12.5px; }
     <button data-tab="table">٢ · الجدول</button>
     <button data-tab="transfer">٣ · نقل من طيران <span class="count" id="transferCount"></span></button>
     <button data-tab="daftra">٤ · دفترة <span class="count" id="daftraCount"></span></button>
+    <button class="theme-btn" id="themeBtn" type="button" title="وضع فاتح">☀</button>
   </nav>
   <div class="kpis" id="kpis"></div>
 </div>
@@ -233,6 +484,10 @@ tr.detail td { background: #171210; color: var(--muted); font-size: 12.5px; }
  * workers, sections, the low-stock rule, undo time.
  * Change a value, run `python3 build.py`, and both apps pick it up.
  * ========================================================================== */
+
+/* Where this device keeps its data (localStorage). A copy under /test/ (the test link)
+   keeps its own, so trying a code there never touches the real app on the same phone. */
+const STORE_NS = /\/test\//.test(location.pathname) ? 'azawi.test.' : 'azawi.';
 
 const CONFIG = Object.freeze({
 
@@ -309,6 +564,47 @@ const CONFIG = Object.freeze({
 });
 </script>
 <script>
+/* ---- src/shared/theme.js ---- */
+/* ============================================================================
+ * AZAWI · Main store — light / dark switch
+ *
+ * The page carries two stylesheets (made by build.py): #css-dark and #css-light.
+ * Only one is active at a time. The choice is kept per device (localStorage).
+ * The button is the last one in the tabs (#themeBtn).
+ * ========================================================================== */
+
+const Theme = (() => {
+  const KEY = STORE_NS + 'theme';
+
+  function saved() {
+    try { return localStorage.getItem(KEY) === 'light' ? 'light' : 'dark'; } catch (e) { return 'dark'; }
+  }
+
+  function apply(mode) {
+    const dark = document.getElementById('css-dark'), light = document.getElementById('css-light');
+    if (dark && light) { dark.media = mode === 'light' ? 'not all' : 'all'; light.media = mode === 'light' ? 'all' : 'not all'; }
+    document.documentElement.dataset.theme = mode;
+    const btn = document.getElementById('themeBtn');
+    if (btn) { btn.textContent = mode === 'light' ? '🌙' : '☀'; btn.title = mode === 'light' ? 'وضع غامق' : 'وضع فاتح'; }
+  }
+
+  function toggle() {
+    const mode = saved() === 'light' ? 'dark' : 'light';
+    try { localStorage.setItem(KEY, mode); } catch (e) { /* still switches for now */ }
+    apply(mode);
+  }
+
+  function start() {
+    apply(saved());
+    const btn = document.getElementById('themeBtn');
+    if (btn) btn.addEventListener('click', e => { e.stopPropagation(); toggle(); });
+  }
+
+  return { start, toggle, mode: saved };
+})();
+Theme.start();
+</script>
+<script>
 /* ---- src/shared/core.js ---- */
 /* ============================================================================
  * AZAWI · Main store — core logic (no screen code in this file)
@@ -346,6 +642,8 @@ const Core = (() => {
   /* Each device writes its own ids and slip numbers, so two devices never clash. */
   let device = { idPrefix: 'x', slipPrefix: 'SB-', slipFloor: 1 };
   let replaying = false;                  // true while sync.js re-applies unsent ops
+  let readOnly = false;                   // view-only device code: no changes at all
+  let sectionScope = null;                // view-only code limited to some sections (null = all)
   const listeners = [], actionListeners = [];
 
   /* ---------- setup ---------------------------------------------------- */
@@ -413,6 +711,14 @@ const Core = (() => {
     const n = parseInt(slip.slice(device.slipPrefix.length), 10);
     if (n >= nextSlip) nextSlip = n + 1;
   }
+
+  /** View-only (set by sync.js from the server's answer). Every change is refused. */
+  function setReadOnly(flag) { readOnly = !!flag; }
+  /** Sections this device may see (the server already sends only their items). */
+  function setSectionScope(names) { sectionScope = Array.isArray(names) ? names : null; }
+  const visibleSections = () => (sectionScope ? CONFIG.sections.filter(s => sectionScope.includes(s.name)) : CONFIG.sections);
+  const isReadOnly = () => readOnly;
+  const refuseIfReadOnly = () => (readOnly && !replaying ? fail('وضع مشاهدة: ما تكدر تسجل حركات') : null);
 
   function onChange(fn) { listeners.push(fn); }
   function changed() { listeners.forEach(fn => fn()); }
@@ -484,6 +790,7 @@ const Core = (() => {
    * `allowShort` must be true to take more than الرئيسي shows (needs a second tap in the UI).
    */
   function withdraw({ who, lines, source, allowShort = false }, fixed = {}) {
+    const ro = refuseIfReadOnly(); if (ro) return ro;
     if (!CONFIG.workers.includes(who)) return fail('اختار منو ياخذ');
     if (!lines.length) return fail('ماكو مواد');
     const perSku = {};                      // the same item twice in one slip counts together
@@ -508,6 +815,7 @@ const Core = (() => {
 
   /** نقل — طيران → الرئيسي. Never more than طيران has. */
   function transfer({ who, sku, qty, source }, fixed = {}) {
+    const ro = refuseIfReadOnly(); if (ro) return ro;
     const i = bySku[sku];
     if (!i) return fail('مادة مو معروفة');
     if (!CONFIG.workers.includes(who)) return fail('اختار منو جابها');
@@ -523,6 +831,7 @@ const Core = (() => {
 
   /** إرجاع — always against the withdrawal it came from; never more than is left. */
   function returnGoods({ outId, qty, who, source }, fixed = {}) {
+    const ro = refuseIfReadOnly(); if (ro) return ro;
     const out = moveById(outId);
     if (!out || out.type !== 'out' || out.undone) return fail('السحبة مو موجودة');
     if (!isWhole(qty)) return fail('العدد لازم رقم صحيح أكبر من صفر');
@@ -537,6 +846,7 @@ const Core = (() => {
 
   /** Change an item's location or minimum; kept in the log. */
   function editItem({ sku, field, value, source }, fixed = {}) {
+    const ro = refuseIfReadOnly(); if (ro) return ro;
     const i = bySku[sku];
     if (!i || !['location', 'min'].includes(field)) return fail('تعديل مو مسموح');
     const clean = field === 'min' ? Math.max(0, Math.floor(+value) || 0) : String(value).trim().toUpperCase();
@@ -558,10 +868,11 @@ const Core = (() => {
     if (m.type === 'in' && bySku[m.sku].main < m.qty) return 'انسحب من هاي الكمية بعد النقل';
     return null;
   }
-  const canUndo = m => { const age = Date.now() - m.at; return !undoBlocker(m) && age >= 0 && age < CONFIG.rules.undoWindowMs; };
+  const canUndo = m => { const age = Date.now() - m.at; return !readOnly && !undoBlocker(m) && age >= 0 && age < CONFIG.rules.undoWindowMs; };
 
   /** Reverse a move's effect and keep it in the log as undone. */
   function undo(id, { ignoreWindow = false } = {}) {
+    const ro = refuseIfReadOnly(); if (ro) return ro;
     const m = moveById(id);
     const why = undoBlocker(m);
     if (why) return fail(why);
@@ -593,6 +904,7 @@ const Core = (() => {
 
   /** Mark the chosen rows of one kind as entered under a Daftra voucher number. */
   function markEnteredInDaftra({ kind, voucher, excludeSkus = [] }) {
+    const ro = refuseIfReadOnly(); if (ro) return ro;
     const no = String(voucher || '').trim();
     if (!no) return fail('اكتب رقم الإذن اللي طلع بدفترة');
     const group = daftraPending().find(g => g.kind === kind);
@@ -601,6 +913,7 @@ const Core = (() => {
   }
   /** Mark exactly these moves (still pending, of this kind) under one voucher. */
   function markIds({ kind, voucher, ids, at = Date.now() }) {
+    const ro = refuseIfReadOnly(); if (ro) return ro;
     const done = ids.map(moveById).filter(m => m && m.type === kind && !m.undone && !m.daftra);
     if (!done.length) return fail('ماكو شي محدد');
     done.forEach(m => { m.daftra = { voucher, at }; });
@@ -678,6 +991,7 @@ const Core = (() => {
 
   return {
     DAY, load, importHistory, onChange, onAction, refresh: changed, replay, setDevice, slipCounter, startOfToday,
+    setReadOnly, isReadOnly, setSectionScope, visibleSections,
     item, allItems, photo, allMoves, moveById, peekSlip,
     returnedQty, remaining, openWithdrawals,
     weeklyOut, daysOfCover, isLow, needsTransfer, needsPurchase, suggestedTransfer,
@@ -711,7 +1025,7 @@ const Core = (() => {
 const Sync = (() => {
 
   const S = CONFIG.sync;
-  const KEY = { code: 'azawi.code', server: 'azawi.server.v1', outbox: 'azawi.outbox.v1' };
+  const KEY = { code: STORE_NS + 'code', server: STORE_NS + 'server.v1', outbox: STORE_NS + 'outbox.v1' };
   const DEVICES = { zebra: { idPrefix: 'z', slipPrefix: 'Z-' }, laptop: { idPrefix: 'l', slipPrefix: 'L-' } };
 
   let device = 'zebra', embedded = { items: [], photos: [] };
@@ -772,6 +1086,13 @@ const Sync = (() => {
   /** Put what the server sent into the copy. Returns true if anything changed. */
   function merge(reply) {
     let diff = false;
+    /* who this device is: 'full', or 'view' (+ the person's name) for a view-only code */
+    if (reply.role && (reply.role !== server.role || (reply.viewer || '') !== (server.viewer || ''))) {
+      server.role = reply.role; server.viewer = reply.viewer || ''; diff = true;
+    }
+    if ('sections' in reply && JSON.stringify(reply.sections || null) !== JSON.stringify(server.sections || null)) {
+      server.sections = reply.sections || null; diff = true;        // view-only code limited to these sections
+    }
     (reply.items || []).forEach(i => {
       if (JSON.stringify(server.items[i.sku]) !== JSON.stringify(i)) { server.items[i.sku] = i; diff = true; }
     });
@@ -812,10 +1133,21 @@ const Sync = (() => {
       (op.lines ? op.lines.map(l => l.id) : [op.id]).forEach(id => id && waiting.add(id));
     });
     Core.allMoves().forEach(m => { if (waiting.has(m.id)) m.pending = true; });
+    applyRole();
     Core.refresh();
     dirtyScreen = true;
     tellScreens();
   }
+
+  /** View-only code: core refuses changes, the page hides the action buttons (body.readonly). */
+  function applyRole() {
+    const view = server.role === 'view';
+    Core.setReadOnly(view);
+    Core.setSectionScope(view ? server.sections : null);
+    document.body.classList.toggle('readonly', view);
+    document.body.dataset.viewer = view ? server.viewer : '';
+  }
+  const isViewer = () => server.role === 'view';
 
   /** Ask the app to redraw its current tab. It may say "not now" (someone is typing). */
   function tellScreens() {
@@ -893,6 +1225,11 @@ const Sync = (() => {
     pill.hidden = false;
     const n = outbox.length;
     pill.className = 'sync ' + s;
+    if (isViewer() && s !== 'locked') {           // short: «👁 وسام ●»
+      pill.textContent = `👁 ${server.viewer} ${s === 'online' ? '●' : s === 'offline' ? '○' : '…'}`;
+      pill.title = 'وضع مشاهدة' + (lastOk ? ' · آخر تحديث ' + UI.time(lastOk) : '');
+      return;
+    }
     pill.textContent = s === 'online' ? (n ? `⇅ يرسل ${n}` : '● متصل')
       : s === 'offline' ? (n ? `○ غير متصل · ${n} تنتظر` : '○ غير متصل')
       : s === 'locked' ? '🔒 رمز الجهاز' : '…';
@@ -955,13 +1292,43 @@ const Sync = (() => {
   const framed = () => { try { return window.top !== window; } catch { return true; } };
   const FRAMED_MSG = 'العرض داخل Claude يمنع الاتصال. نزّل الملف وافتحه بـ Chrome';
 
-  function onPillClick() {
+  /* ---------- the menu under the status pill: who this device is + sign out ---------- */
+
+  function closeMenu() { const m = document.getElementById('syncMenu'); if (m) m.remove(); }
+
+  function onPillClick(e) {
+    e.stopPropagation();
     if (state === 'locked') return showCodeBox();
-    const n = outbox.length;
-    UI.toast(state === 'online'
-      ? `متصل · آخر تحديث ${UI.time(lastOk)}${n ? ` · ${n} تنتظر` : ''}`
-      : `غير متصل${n ? ` · ${n} حركة محفوظة بالجهاز وتنرسل لما يرجع الاتصال` : ''}`, state === 'online' ? '' : 'warn');
+    if (document.getElementById('syncMenu')) return closeMenu();
     kick();
+    const n = outbox.length, pill = document.getElementById('syncPill'), r = pill.getBoundingClientRect();
+    const m = document.createElement('div');
+    m.id = 'syncMenu';
+    m.className = 'sync-menu';
+    m.style.top = (r.bottom + 8) + 'px';
+    m.style.left = Math.max(10, Math.min(innerWidth - 250, r.left + r.width / 2 - 115)) + 'px';
+    m.innerHTML = `<div class="acct"><b>${isViewer() ? '👁 ' + UI.esc(server.viewer) + ' · مشاهدة بس' : '● الرمز الكامل'}</b>
+        <small>${state === 'online' ? 'متصل' + (lastOk ? ' · آخر تحديث ' + UI.time(lastOk) : '') : 'غير متصل'}</small></div>
+      ${n ? `<div class="warn">⚠ اكو ${n} حركة بعدها ما انرسلت للقاعدة. ما تكدر تطلع لحد ما يرجع الإنترنت وتنرسل.</div>` : ''}
+      <button type="button" class="out" data-sync="logout" ${n ? 'disabled' : ''}>⎋ خروج من هذا الجهاز</button>`;
+    m.addEventListener('click', ev => {
+      ev.stopPropagation();
+      if (ev.target.closest('[data-sync="logout"]')) logout();
+    });
+    document.body.appendChild(m);
+  }
+
+  /** Forget the code on this device (only when nothing is waiting to be sent). */
+  function logout() {
+    if (outbox.length) return UI.toast(`اكو ${outbox.length} حركة تنتظر الإرسال. انتظر يرجع الإنترنت`, 'bad');
+    closeMenu();
+    clearTimeout(timer);
+    code = '';
+    store.del(KEY.code);
+    store.del(KEY.server);
+    server = { items: {}, moves: {}, vouchers: [], now: 0 };
+    rebuild();                                   // back to the page's own (empty) numbers
+    lock('');
   }
 
   /* ---------- start ---------------------------------------------------------- */
@@ -982,6 +1349,7 @@ const Sync = (() => {
 
     const pill = document.getElementById('syncPill');
     if (pill) pill.addEventListener('click', onPillClick);
+    document.addEventListener('click', closeMenu);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) kick(); });
     addEventListener('online', kick);
 
@@ -994,7 +1362,7 @@ const Sync = (() => {
   /** The app redraws here after a change from the server. Return false = "not now, I'm busy". */
   function onUpdate(fn) { updateListeners.push(fn); }
 
-  return { start, onUpdate, kick, pending: () => outbox.length, status: () => state };
+  return { start, onUpdate, kick, pending: () => outbox.length, status: () => state, isViewer, viewer: () => server.viewer || '' };
 })();
 </script>
 <script>
@@ -1427,6 +1795,10 @@ const Exports = (() => {
 
   /* ======================= 1. state ===================================== */
 
+  /** View-only device (a code that can only look): tables and own moves, no actions. */
+  const RO = () => Core.isReadOnly();
+  const RO_TABS = ['desk', 'table'];
+
   const state = {
     tab: 'desk',
     desk: { mode: 'out', worker: null, cart: [], query: '', section: 'الكل', group: '', lowOnly: false, returnSku: null, confirmShort: false },
@@ -1446,7 +1818,7 @@ const Exports = (() => {
 
   const sectionChips = (current, action) =>
     `<button class="chip ${current === 'الكل' ? 'on' : ''}" data-action="${action}" data-name="الكل">الكل</button>` +
-    CONFIG.sections.map(s => {
+    Core.visibleSections().map(s => {
       const n = Core.allItems().filter(i => i.section === s.name).length;
       return `<button class="chip ${current === s.name ? 'on' : ''} ${n ? '' : 'dim'}" data-action="${action}" data-name="${esc(s.name)}"><i class="dot" style="background:${s.color}"></i>${esc(s.name)} <small>${n}</small></button>`;
     }).join('');
@@ -1461,7 +1833,7 @@ const Exports = (() => {
     const end = m.source === SOURCE && Core.canUndo(m)
       ? `<button class="btn small" data-action="undo" data-id="${m.id}" style="color:var(--warn)">تراجع</button>`
       : UI.daftraTag(m);
-    return `<div class="feed-row ${m.undone ? 'undone' : ''}">${photo(i)}<span class="n">${esc(i.name)}</span>${UI.worker(m.who)}${end}<span class="q ${cls}">${sign}${m.qty}</span><code>${UI.time(m.at)}</code></div>`;
+    return `<div class="feed-row ${m.undone ? 'undone' : ''}">${photo(i)}<span class="n">${esc(i.name)}</span>${UI.worker(m.who)}${end}<span class="q ${cls}">${sign}${m.qty}</span><code>${m.at < Core.startOfToday() ? UI.day(m.at) + ' ' : ''}${UI.time(m.at)}</code></div>`;
   }
 
   /* ======================= 3. views ===================================== */
@@ -1536,6 +1908,7 @@ const Exports = (() => {
 
     add(item) {
       const s = this.s;
+      if (RO()) return UI.toast(`${item.name} · الرئيسي ${item.main} · طيران ${item.tayaran}${item.location ? ' · ' + item.location : ''}`);
       if (s.mode === 'return') { s.returnSku = item.sku; return render({ focus: '#deskSearch' }); }
       const line = s.cart.find(l => l.sku === item.sku);
       if (line) line.qty++;
@@ -1626,7 +1999,7 @@ const Exports = (() => {
       const counts = { all: Core.allItems().length, low: Core.allItems().filter(Core.isLow).length, buy: Core.needsPurchase().length };
       return `<div class="view panel">
         <div class="panel-head">
-          <select class="field" data-change="section">${['الكل', ...CONFIG.sections.map(x => x.name)].map(n => `<option ${n === s.section ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
+          <select class="field" data-change="section">${['الكل', ...Core.visibleSections().map(x => x.name)].map(n => `<option ${n === s.section ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
           <input class="field" id="tableSearch" style="width:240px" placeholder="⌕ اسم، SKU، باركود أو مكان" value="${esc(s.query)}">
           ${[['all', 'الكل'], ['low', 'تحت الحد'], ['buy', 'ماكو بطيران']].map(([k, t]) => `<button class="chip ${s.filter === k ? 'on' : ''}" data-action="filter" data-filter="${k}">${t} <small>${counts[k]}</small></button>`).join('')}
           <div class="end"><span style="color:var(--muted);font-size:12.5px">الحركات باسم:</span>${workerPicker(s.worker, 'worker', true)}</div>
@@ -1635,9 +2008,9 @@ const Exports = (() => {
           <thead><tr><th>المادة</th><th>المكان ✎</th><th>الرئيسي</th><th>الحد ✎</th><th>طيران</th><th>طلع بالأسبوع</th><th>الحالة</th><th>حركة سريعة</th></tr></thead>
           <tbody>${rows.slice(0, s.show).map(i => `<tr class="${s.flash === i.sku ? 'saved' : ''}">
             <td>${itemCell(i)}</td>
-            <td><input class="field loc" data-change="location" data-sku="${i.sku}" value="${esc(i.location || '')}" placeholder="—"></td>
+            <td><input class="field loc" data-change="location" data-sku="${i.sku}" value="${esc(i.location || '')}" placeholder="—" ${RO() ? 'readonly' : ''}></td>
             <td class="${Core.isLow(i) ? 'low' : ''}" style="font-size:15px;font-weight:800">${i.main}</td>
-            <td><input class="field qty" type="number" min="0" data-change="min" data-sku="${i.sku}" value="${i.min}"></td>
+            <td><input class="field qty" type="number" min="0" data-change="min" data-sku="${i.sku}" value="${i.min}" ${RO() ? 'readonly' : ''}></td>
             <td style="font-weight:700">${i.tayaran}</td><td>${Core.weeklyOut(i.sku)}</td><td>${statusTag(i)}</td>
             <td><div class="row-actions"><input class="field qty" type="number" min="1" id="quick-${i.sku}" data-enter="withdraw" data-sku="${i.sku}" placeholder="${Core.isLow(i) && i.tayaran > 0 ? Core.suggestedTransfer(i) : 'كم'}">
               <button class="btn small red" data-action="withdraw" data-sku="${i.sku}">سحب</button>
@@ -1867,6 +2240,7 @@ const Exports = (() => {
   }
 
   function switchTab(tab) {
+    if (RO() && !RO_TABS.includes(tab)) tab = 'desk';
     state.tab = tab;
     $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
     moveTabPill();
@@ -1911,7 +2285,9 @@ const Exports = (() => {
     Sync.onUpdate(() => {
       const a = document.activeElement, typing = a && a.tagName === 'INPUT';
       if (typing && !/Search$/.test(a.id)) return false;
+      if (RO() && !RO_TABS.includes(state.tab)) return switchTab('desk');
       render(typing ? { focus: '#' + a.id } : {});
+      moveTabPill();                               // tabs may have been hidden / shown
     });
 
     addEventListener('resize', moveTabPill);

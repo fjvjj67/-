@@ -2005,7 +2005,7 @@ const Scanner = (() => {
           ? `<div class="chips">${[[1, 'اليوم'], [7, '7 أيام'], [30, '30 يوم']].map(([d, t]) => `<button class="${d === days ? 'on' : ''}" data-action="days" data-days="${d}">${t}</button>`).join('')}</div>`
           : `<div class="chips">${['الكل', ...WORKERS].map(w => `<button class="${w === who ? 'on' : ''}" data-action="worker" data-worker="${esc(w)}">${esc(w)}</button>`).join('')}</div>`}
         <div class="section-head"><span>${RO() ? 'حركاتك · ' : ''}${days === 1 ? 'اليوم' : 'آخر ' + days + ' يوم'}</span><span>سحب ${sum('out')} · رجع ${sum('return')} · نقل ${sum('in')}</span></div>
-        ${list.map(m => moveRow(m, { withDaftra: true, withReturn: true })).join('') || '<div class="empty">ماكو حركات.</div>'}`;
+        ${list.map(m => moveRow(m, { withDaftra: true, withReturn: true })).join('') || `<div class="empty">${RO() ? 'ماكو حركات.' : 'ماكو حركات اليوم.'}</div>`}`;
       $('#bottom').innerHTML = '';
     },
     actions: {

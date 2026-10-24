@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>الرئيسي · زيبرا</title>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
-<style>
+<style id="css-dark">
 /* ============================================================================
  * AZAWI · Zebra TC27 app — styles
  * Phone-width, dark, big touch targets. Colours are tokens in :root.
@@ -34,7 +34,8 @@ header { padding: 12px 14px 8px; display: flex; align-items: center; gap: 8px; }
 .brand small { display: block; font-size: 11px; color: var(--muted); font-weight: 600; margin-top: -3px; }
 .today { margin-inline-start: auto; text-align: left; font-size: 11px; color: var(--muted); line-height: 1.3; }
 .today b { display: block; font-size: 18px; color: var(--text); }
-.tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 0 14px 10px; }
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr) 42px; gap: 6px; padding: 0 14px 10px; }
+.tabs .theme-btn { padding: 9px 0; font-size: 17px; }   /* ☀ / 🌙 (theme.js) */
 .tabs button { position: relative; background: var(--card); border: 1px solid var(--line); color: var(--muted); border-radius: 14px; padding: 9px 2px; font-size: 14px; font-weight: 800; }
 .tabs button.on { border-color: var(--brand); background: #3a2214; color: var(--text); }
 .badge { position: absolute; top: -6px; left: -4px; background: var(--bad); color: #fff; font-size: 11px; font-weight: 800; border-radius: 99px; padding: 0 7px; min-width: 20px; }
@@ -195,6 +196,12 @@ header { padding: 12px 14px 8px; display: flex; align-items: center; gap: 8px; }
 @keyframes pulse { 50% { border-color: var(--brand); } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
+/* ---- view-only code (body.readonly is set by sync.js) ---- */
+body.readonly .tabs { grid-template-columns: 1fr 1fr 42px; }
+body.readonly .tabs [data-tab="returns"], body.readonly .tabs [data-tab="transfer"] { display: none; }
+body.readonly .tabs [data-tab="withdraw"] { font-size: 0; }
+body.readonly .tabs [data-tab="withdraw"]::after { content: 'بحث'; font-size: 14px; }
+
 /* ---- sync: status pill + one-time device code (both apps) ---- */
 .sync { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line);
   background: var(--card); color: var(--muted); white-space: nowrap; vertical-align: middle; line-height: 1.6; }
@@ -214,6 +221,255 @@ header { padding: 12px 14px 8px; display: flex; align-items: center; gap: 8px; }
 .sync-code .err { color: var(--bad); min-height: 1.2em; }
 .sync-code button { background: var(--brand); color: #fff; font-weight: 800; font-size: 16px; padding: 12px; border-radius: 10px; border: 0; }
 .sync-code button:disabled { opacity: .5; }
+
+/* ---- menu under the status pill: who + sign out ---- */
+.sync { cursor: pointer; }
+.sync-menu { position: fixed; z-index: 250; min-width: 230px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 14px; box-shadow: 0 12px 30px #0008; padding: 6px; }
+.sync-menu .acct { padding: 10px 12px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.sync-menu .acct b { display: block; font-size: 15px; color: var(--text); }
+.sync-menu .acct small { color: var(--muted); font-size: 12px; }
+.sync-menu .warn { margin: 6px; padding: 9px 10px; border-radius: 10px; background: #45301a; color: #f6dfb8; font-size: 12.5px; line-height: 1.5; }
+.sync-menu button { display: block; width: 100%; text-align: right; padding: 11px 12px; border-radius: 10px; font-size: 15px;
+  font-weight: 700; background: none; border: 0; color: var(--bad); cursor: pointer; }
+.sync-menu button:disabled { opacity: .4; cursor: default; }
+</style>
+<style id="css-light" media="not all">
+/* ============================================================================
+ * AZAWI · Zebra TC27 app — styles
+ * Phone-width, dark, big touch targets. Colours are tokens in :root.
+ * ========================================================================== */
+
+/* ---- tokens ---- */
+:root {
+  --bg: #ffffff; --card: #f4f6f8; --card-2: #e9edf1; --line: #d3d9e0;
+  --text: #0f1419; --muted: #5f6b77; --brand: #F37221;
+  --ok: #1d9e63; --bad: #d93a31; --warn: #c98a12; --blue: #2f7fd6;
+}
+
+/* ---- base ---- */
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body { background: #ffffff; color: var(--text); font-family: Cairo, system-ui, sans-serif; font-size: 15px; }
+button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+button:disabled { opacity: .4; cursor: default; }
+mark { background: #F3722155; color: inherit; border-radius: 3px; }
+.app { max-width: 430px; margin: 0 auto; min-height: 100vh; background: var(--bg); display: flex; flex-direction: column; }
+main { flex: 1; padding: 0 14px 100px; }
+
+/* ---- header + tabs ---- */
+header { padding: 12px 14px 8px; display: flex; align-items: center; gap: 8px; }
+.brand { font-weight: 800; font-size: 16px; }
+.brand b { color: var(--brand); }
+.brand small { display: block; font-size: 11px; color: var(--muted); font-weight: 600; margin-top: -3px; }
+.today { margin-inline-start: auto; text-align: left; font-size: 11px; color: var(--muted); line-height: 1.3; }
+.today b { display: block; font-size: 18px; color: var(--text); }
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr) 42px; gap: 6px; padding: 0 14px 10px; }
+.tabs .theme-btn { padding: 9px 0; font-size: 17px; }   /* ☀ / 🌙 (theme.js) */
+.tabs button { position: relative; background: var(--card); border: 1px solid var(--line); color: var(--muted); border-radius: 14px; padding: 9px 2px; font-size: 14px; font-weight: 800; }
+.tabs button.on { border-color: var(--brand); background: #fde6d6; color: var(--text); }
+.badge { position: absolute; top: -6px; left: -4px; background: var(--bad); color: #fff; font-size: 11px; font-weight: 800; border-radius: 99px; padding: 0 7px; min-width: 20px; }
+
+/* ---- common pieces ---- */
+.label { font-size: 12px; color: var(--muted); font-weight: 700; margin: 0 2px 5px; }
+.section-head { display: flex; justify-content: space-between; align-items: center; margin: 12px 2px 6px; }
+.section-head b { font-size: 14px; }
+.section-head span { font-size: 12px; color: var(--muted); }
+.note { font-size: 12px; color: var(--muted); line-height: 1.7; margin-top: 12px; background: var(--card); border: 1px dashed var(--line); border-radius: 12px; padding: 8px 10px; }
+.empty { padding: 18px 14px; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.th { object-fit: cover; background: #fff; display: block; }
+.noph { display: flex; align-items: center; justify-content: center; background: var(--card-2); color: #b9c1ca; font-size: 18px; }
+.pill { font-size: 12px; font-weight: 800; border-radius: 99px; padding: 2px 9px; white-space: nowrap; }
+.pill.good { background: #dff5ea; color: var(--ok); }
+.pill.low { background: #fdf0d9; color: var(--warn); }
+.pill.out { background: #fde4e2; color: var(--bad); }
+.tag { font-size: 10.5px; font-weight: 700; border-radius: 99px; padding: 1px 7px; margin-inline-start: 4px; }
+.tag.ok { background: #dff5ea; color: var(--ok); }
+.tag.warn { background: #fdf0d9; color: var(--warn); }
+.tag.blue { background: #e1eefc; color: var(--blue); }
+.chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 6px; scrollbar-width: none; }
+.chips button { flex: none; padding: 5px 12px; border-radius: 99px; background: var(--card); border: 1px solid var(--line); font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.chips button.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.chips button.empty-section { opacity: .5; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-inline-end: 4px; }
+
+/* ---- worker picker ---- */
+.workers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+.workers button { padding: 10px 4px; border-radius: 14px; background: var(--card); border: 2px solid var(--line); font-size: 16px; font-weight: 800; }
+.workers button.on { background: var(--brand); border-color: var(--brand); color: #fff; box-shadow: 0 6px 20px #F3722155; }
+.workers.needed button { animation: pulse 1.2s infinite; }
+
+/* ---- search box + results ---- */
+.search { position: relative; margin-bottom: 10px; z-index: 6; }
+.search input { width: 100%; height: 54px; padding: 0 46px 0 14px; border-radius: 16px; background: var(--card); border: 2px solid var(--brand); color: var(--text); font: inherit; font-size: 15.5px; }
+/* hide the browser's own clear (x) button */
+.search input::-webkit-search-cancel-button { display: none; }
+.search input::placeholder { color: #5f6b77; }
+.search .icon { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 19px; color: var(--brand); }
+.results { position: absolute; top: 58px; left: 0; right: 0; background: #e9edf1; border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 18px 40px #000a; max-height: 62vh; overflow-y: auto; }
+.results button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; text-align: right; border-bottom: 1px solid #d3d9e0; }
+.results button:last-child { border: 0; }
+.results button.hi { background: #fde6d6; }
+.results .th, .results .noph { width: 44px; height: 44px; border-radius: 9px; flex: none; }
+.results .n { flex: 1; min-width: 0; }
+.results .n b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.results .n small { font-size: 11.5px; color: var(--muted); font-family: ui-monospace, monospace; }
+
+/* ---- cart (one withdrawal slip) ---- */
+.cart { background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; margin-bottom: 12px; }
+.cart-head { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; background: #e9edf1; font-size: 13px; color: #0f1419; font-weight: 700; }
+.cart-head code { font-family: ui-monospace, monospace; color: var(--brand); }
+.line { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-top: 1px solid #e9edf1; animation: in .25s ease; }
+.line.flash { background: #e9edf1; }
+.line .th, .line .noph { width: 46px; height: 46px; border-radius: 10px; flex: none; }
+.line .n { flex: 1; min-width: 0; }
+.line .n b { display: block; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.line .n small { font-size: 11px; color: var(--muted); }
+.line .n small.short { color: var(--warn); font-weight: 700; }
+.stepper { display: flex; align-items: center; gap: 3px; }
+.stepper button { width: 30px; height: 34px; border-radius: 9px; background: var(--card-2); font-weight: 800; font-size: 17px; }
+.stepper .qty { min-width: 46px; text-align: center; font-weight: 800; font-size: 18px; background: #ffffff; border: 1px solid var(--line); border-radius: 9px; padding: 2px 4px; }
+.cart-total { display: flex; justify-content: space-between; padding: 8px 12px; border-top: 1px dashed #d3d9e0; font-weight: 800; font-size: 13.5px; }
+
+/* ---- photo grid ---- */
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px; text-align: right; display: flex; flex-direction: column; overflow: hidden; }
+.tile .th, .tile .noph { width: 100%; aspect-ratio: 1; border-radius: 9px; font-size: 22px; }
+@supports not (aspect-ratio: 1) { .tile .th, .tile .noph { height: calc((100vw - 64px) / 3); } }   /* Chrome < 88 (the Zebra has 86) */
+.tile b { font-size: 11.5px; line-height: 1.3; margin: 4px 2px 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.6em; }
+.tile .pill { align-self: flex-start; margin: 2px; font-size: 11px; }
+
+/* ---- move rows (log) ---- */
+.move { display: flex; align-items: center; gap: 9px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 7px 10px; margin-bottom: 6px; }
+.move.undone { opacity: .35; text-decoration: line-through; }
+.move .th, .move .noph { width: 42px; height: 42px; border-radius: 10px; flex: none; }
+.move .n { flex: 1; min-width: 0; }
+.move .n b { display: block; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.move .n small { font-size: 11.5px; color: var(--muted); }
+.move .q { font-size: 18px; font-weight: 800; }
+.q.out { color: var(--bad); } .q.in { color: var(--ok); } .q.ret { color: var(--blue); }
+.move .undo { font-size: 11.5px; color: var(--warn); border: 1px solid #edc77a; border-radius: 9px; padding: 3px 8px; font-weight: 700; }
+.move .return { font-size: 11.5px; color: var(--blue); border: 1px solid #a9c9ef; border-radius: 9px; padding: 3px 8px; font-weight: 700; }
+
+/* ---- action cards (transfer / returns) ---- */
+.hero { background: linear-gradient(150deg, #fde6d6, #e9edf1 60%, #f4f6f8); border: 1px solid #fde6d6; border-radius: 20px; padding: 12px 16px; margin-bottom: 10px; }
+.hero .big { font-size: 34px; font-weight: 800; line-height: 1.15; }
+.hero .big small { font-size: 14px; color: #0f1419; font-weight: 600; }
+.hero p { font-size: 12px; color: #0f1419; line-height: 1.6; }
+.card { display: flex; gap: 10px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 8px; margin-bottom: 8px; width: 100%; text-align: right; }
+.card .th, .card .noph { width: 56px; height: 56px; border-radius: 12px; flex: none; }
+.card .n { flex: 1; min-width: 0; }
+.card .n b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .n small { font-size: 11.5px; color: var(--muted); display: block; }
+.card .go { flex: none; border-radius: 12px; padding: 8px 10px; font-weight: 800; font-size: 13px; text-align: center; line-height: 1.2; }
+.card .go small { display: block; font-size: 10.5px; opacity: .8; }
+.card .go.green { background: #dff5ea; color: var(--ok); }
+.card .go.blue { background: #e1eefc; color: var(--blue); }
+.card .go.red { background: #fde4e2; color: var(--bad); }
+
+/* ---- bottom action bar ---- */
+.bottom { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 430px; padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, var(--bg) 30%); display: flex; gap: 8px; z-index: 5; }
+.bottom:empty { display: none; }
+.btn { flex: 1; padding: 14px; border-radius: 16px; font-weight: 800; font-size: 15.5px; background: var(--card-2); border: 1px solid var(--line); }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+.btn.small { flex: none; padding: 14px; font-size: 13px; }
+
+/* ---- quantity sheet ---- */
+.overlay { position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: #000a; display: none; z-index: 20; align-items: flex-end; justify-content: center; }
+.overlay.on { display: flex; }
+.sheet { width: 100%; max-width: 430px; background: var(--card); border-radius: 24px 24px 0 0; padding: 12px 14px calc(14px + env(safe-area-inset-bottom)); animation: up .22s ease; max-height: 97vh; overflow: auto; }
+.sheet-head { display: flex; gap: 10px; align-items: center; }
+.sheet-head .th, .sheet-head .noph { width: 70px; height: 70px; border-radius: 14px; flex: none; cursor: zoom-in; }
+.sheet-head .name { font-size: 17px; font-weight: 800; line-height: 1.3; }
+.sheet-head small { font-size: 12px; color: var(--muted); font-family: ui-monospace, monospace; }
+.stock { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.stock div { background: #0003; border-radius: 12px; padding: 5px 10px; display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: var(--muted); }
+.stock b { font-size: 18px; color: var(--text); }
+.stock b.low { color: var(--bad); }
+.mode { margin-top: 8px; text-align: center; font-weight: 800; font-size: 13px; border-radius: 10px; padding: 5px; }
+.mode.out { background: #fde4e2; color: #b3261e; }
+.mode.in { background: #dff5ea; color: #136b45; }
+.mode.return { background: #e1eefc; color: #1f5fa8; }
+.display { margin: 8px 0; height: 60px; border-radius: 16px; background: #ffffff; border: 2px solid var(--brand); display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 800; }
+.display.empty { color: #d3d9e0; font-size: 16px; font-weight: 600; border-color: var(--line); }
+.display .default { font-size: 40px; color: #5f6b77; }
+.hint { text-align: center; font-size: 12px; color: var(--muted); margin: -4px 0 6px; }
+.quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 7px; }
+.quick button { padding: 8px; border-radius: 12px; background: #fde6d6; color: #b44d0c; font-weight: 800; }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.keypad button { height: 48px; border-radius: 14px; background: var(--card-2); font-size: 23px; font-weight: 700; }
+.keypad button.fn { font-size: 16px; color: var(--muted); }
+.sheet .workers { margin: 10px 0 0; }
+.save { width: 100%; margin-top: 10px; padding: 15px; border-radius: 16px; background: var(--ok); color: #dff5ea; font-weight: 800; font-size: 16px; }
+.save.confirm { background: var(--bad); color: #fff; }
+.warning { font-size: 12.5px; color: var(--warn); text-align: center; margin-top: 6px; font-weight: 700; line-height: 1.5; }
+
+/* ---- done sheet, lightbox, toast ---- */
+.done { width: 100%; max-width: 430px; background: var(--card); border-radius: 24px 24px 0 0; padding: 20px 16px; text-align: center; animation: up .22s ease; }
+.done .check { width: 70px; height: 70px; border-radius: 50%; background: #dff5ea; color: var(--ok); font-size: 36px; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; }
+.done h2 { font-size: 19px; }
+.done p { color: var(--muted); margin: 4px 0 12px; }
+#lightbox { position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: #000e; z-index: 50; display: none; align-items: center; justify-content: center; padding: 16px; }
+#lightbox.on { display: flex; }
+#lightbox img { max-width: 100%; max-height: 90vh; border-radius: 14px; background: #fff; }
+.toast { position: fixed; top: 14px; left: 50%; transform: translate(-50%, -90px); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 14px; font-weight: 700; font-size: 13.5px; z-index: 40; transition: transform .3s; max-width: 92%; text-align: center; }
+.toast.on { transform: translate(-50%, 0); }
+.toast.warn { background: var(--warn); }
+.toast.bad { background: var(--bad); color: #fff; }
+
+/* ---- shown when no items are loaded yet ---- */
+.no-items { margin: 10px 14px; padding: 12px 14px; border-radius: 14px; background: #fdf0d9; color: #8a5a00; font-weight: 700; font-size: 13.5px; line-height: 1.7; text-align: center; }
+
+/* ---- motion ---- */
+@keyframes in { from { opacity: 0; transform: translateY(6px); } }
+@keyframes up { from { transform: translateY(100%); } }
+@keyframes pulse { 50% { border-color: var(--brand); } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* ---- view-only code (body.readonly is set by sync.js) ---- */
+body.readonly .tabs { grid-template-columns: 1fr 1fr 42px; }
+body.readonly .tabs [data-tab="returns"], body.readonly .tabs [data-tab="transfer"] { display: none; }
+body.readonly .tabs [data-tab="withdraw"] { font-size: 0; }
+body.readonly .tabs [data-tab="withdraw"]::after { content: 'بحث'; font-size: 14px; }
+
+/* ---- sync: status pill + one-time device code (both apps) ---- */
+.sync { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--card); color: var(--muted); white-space: nowrap; vertical-align: middle; line-height: 1.6; }
+.sync.online { color: var(--ok); border-color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+.sync.offline { color: var(--warn); border-color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+.sync.locked { color: var(--bad); border-color: var(--bad); }
+
+.sync-code { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 300; display: none; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, .72); padding: 16px; }
+.sync-code.on { display: flex; }
+.sync-code form { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px;
+  width: min(360px, 100%); display: grid; gap: 10px; }
+.sync-code b { font-size: 18px; }
+.sync-code p { color: var(--muted); font-size: 13px; }
+.sync-code input { font-size: 20px; letter-spacing: 2px; text-align: center; padding: 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text); font-family: ui-monospace, monospace; }
+.sync-code .err { color: var(--bad); min-height: 1.2em; }
+.sync-code button { background: var(--brand); color: #fff; font-weight: 800; font-size: 16px; padding: 12px; border-radius: 10px; border: 0; }
+.sync-code button:disabled { opacity: .5; }
+
+/* ---- menu under the status pill: who + sign out ---- */
+.sync { cursor: pointer; }
+.sync-menu { position: fixed; z-index: 250; min-width: 230px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 14px; box-shadow: 0 12px 30px #0008; padding: 6px; }
+.sync-menu .acct { padding: 10px 12px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.sync-menu .acct b { display: block; font-size: 15px; color: var(--text); }
+.sync-menu .acct small { color: var(--muted); font-size: 12px; }
+.sync-menu .warn { margin: 6px; padding: 9px 10px; border-radius: 10px; background: #fdf0d9; color: #8a5a00; font-size: 12.5px; line-height: 1.5; }
+.sync-menu button { display: block; width: 100%; text-align: right; padding: 11px 12px; border-radius: 10px; font-size: 15px;
+  font-weight: 700; background: none; border: 0; color: var(--bad); cursor: pointer; }
+.sync-menu button:disabled { opacity: .4; cursor: default; }
+
+/* ---- light-only ---- */
+.who[style*="#3a2214"]{background:#fde6d6 !important;color:#b44d0c !important}
+.who[style*="#16283d"]{background:#e1eefc !important;color:#1f5fa8 !important}
+.who[style*="#173a2b"]{background:#dff5ea !important;color:#136b45 !important}
+.who[style*="#3a1630"]{background:#fbe3f3 !important;color:#9b2a7a !important}
+[style*="#6a2a26"]{border-color:#f2aaa4 !important}
+.overlay{background:#0006 !important}
 </style>
 </head>
 <body>
@@ -228,6 +484,7 @@ header { padding: 12px 14px 8px; display: flex; align-items: center; gap: 8px; }
     <button data-tab="returns">إرجاع</button>
     <button data-tab="transfer">من طيران</button>
     <button data-tab="log">السجل</button>
+    <button class="theme-btn" id="themeBtn" type="button" title="وضع فاتح">☀</button>
   </nav>
   <div class="no-items" id="noItems" hidden>ماكو مواد بالنظام بعد. ابعث ملف القسم من دفترة (بالصور والأعداد) حتى ينضاف.</div>
   <main id="view"></main>
@@ -250,6 +507,10 @@ header { padding: 12px 14px 8px; display: flex; align-items: center; gap: 8px; }
  * workers, sections, the low-stock rule, undo time.
  * Change a value, run `python3 build.py`, and both apps pick it up.
  * ========================================================================== */
+
+/* Where this device keeps its data (localStorage). A copy under /test/ (the test link)
+   keeps its own, so trying a code there never touches the real app on the same phone. */
+const STORE_NS = /\/test\//.test(location.pathname) ? 'azawi.test.' : 'azawi.';
 
 const CONFIG = Object.freeze({
 
@@ -326,6 +587,47 @@ const CONFIG = Object.freeze({
 });
 </script>
 <script>
+/* ---- src/shared/theme.js ---- */
+/* ============================================================================
+ * AZAWI · Main store — light / dark switch
+ *
+ * The page carries two stylesheets (made by build.py): #css-dark and #css-light.
+ * Only one is active at a time. The choice is kept per device (localStorage).
+ * The button is the last one in the tabs (#themeBtn).
+ * ========================================================================== */
+
+const Theme = (() => {
+  const KEY = STORE_NS + 'theme';
+
+  function saved() {
+    try { return localStorage.getItem(KEY) === 'light' ? 'light' : 'dark'; } catch (e) { return 'dark'; }
+  }
+
+  function apply(mode) {
+    const dark = document.getElementById('css-dark'), light = document.getElementById('css-light');
+    if (dark && light) { dark.media = mode === 'light' ? 'not all' : 'all'; light.media = mode === 'light' ? 'all' : 'not all'; }
+    document.documentElement.dataset.theme = mode;
+    const btn = document.getElementById('themeBtn');
+    if (btn) { btn.textContent = mode === 'light' ? '🌙' : '☀'; btn.title = mode === 'light' ? 'وضع غامق' : 'وضع فاتح'; }
+  }
+
+  function toggle() {
+    const mode = saved() === 'light' ? 'dark' : 'light';
+    try { localStorage.setItem(KEY, mode); } catch (e) { /* still switches for now */ }
+    apply(mode);
+  }
+
+  function start() {
+    apply(saved());
+    const btn = document.getElementById('themeBtn');
+    if (btn) btn.addEventListener('click', e => { e.stopPropagation(); toggle(); });
+  }
+
+  return { start, toggle, mode: saved };
+})();
+Theme.start();
+</script>
+<script>
 /* ---- src/shared/core.js ---- */
 /* ============================================================================
  * AZAWI · Main store — core logic (no screen code in this file)
@@ -363,6 +665,8 @@ const Core = (() => {
   /* Each device writes its own ids and slip numbers, so two devices never clash. */
   let device = { idPrefix: 'x', slipPrefix: 'SB-', slipFloor: 1 };
   let replaying = false;                  // true while sync.js re-applies unsent ops
+  let readOnly = false;                   // view-only device code: no changes at all
+  let sectionScope = null;                // view-only code limited to some sections (null = all)
   const listeners = [], actionListeners = [];
 
   /* ---------- setup ---------------------------------------------------- */
@@ -430,6 +734,14 @@ const Core = (() => {
     const n = parseInt(slip.slice(device.slipPrefix.length), 10);
     if (n >= nextSlip) nextSlip = n + 1;
   }
+
+  /** View-only (set by sync.js from the server's answer). Every change is refused. */
+  function setReadOnly(flag) { readOnly = !!flag; }
+  /** Sections this device may see (the server already sends only their items). */
+  function setSectionScope(names) { sectionScope = Array.isArray(names) ? names : null; }
+  const visibleSections = () => (sectionScope ? CONFIG.sections.filter(s => sectionScope.includes(s.name)) : CONFIG.sections);
+  const isReadOnly = () => readOnly;
+  const refuseIfReadOnly = () => (readOnly && !replaying ? fail('وضع مشاهدة: ما تكدر تسجل حركات') : null);
 
   function onChange(fn) { listeners.push(fn); }
   function changed() { listeners.forEach(fn => fn()); }
@@ -501,6 +813,7 @@ const Core = (() => {
    * `allowShort` must be true to take more than الرئيسي shows (needs a second tap in the UI).
    */
   function withdraw({ who, lines, source, allowShort = false }, fixed = {}) {
+    const ro = refuseIfReadOnly(); if (ro) return ro;
     if (!CONFIG.workers.includes(who)) return fail('اختار منو ياخذ');
     if (!lines.length) return fail('ماكو مواد');
     const perSku = {};                      // the same item twice in one slip counts together
@@ -525,6 +838,7 @@ const Core = (() => {
 
   /** نقل — طيران → الرئيسي. Never more than طيران has. */
   function transfer({ who, sku, qty, source }, fixed = {}) {
+    const ro = refuseIfReadOnly(); if (ro) return ro;
     const i = bySku[sku];
     if (!i) return fail('مادة مو معروفة');
     if (!CONFIG.workers.includes(who)) return fail('اختار منو جابها');
@@ -540,6 +854,7 @@ const Core = (() => {
 
   /** إرجاع — always against the withdrawal it came from; never more than is left. */
   function returnGoods({ outId, qty, who, source }, fixed = {}) {
+    const ro = refuseIfReadOnly(); if (ro) return ro;
     const out = moveById(outId);
     if (!out || out.type !== 'out' || out.undone) return fail('السحبة مو موجودة');
     if (!isWhole(qty)) return fail('العدد لازم رقم صحيح أكبر من صفر');
@@ -554,6 +869,7 @@ const Core = (() => {
 
   /** Change an item's location or minimum; kept in the log. */
   function editItem({ sku, field, value, source }, fixed = {}) {
+    const ro = refuseIfReadOnly(); if (ro) return ro;
     const i = bySku[sku];
     if (!i || !['location', 'min'].includes(field)) return fail('تعديل مو مسموح');
     const clean = field === 'min' ? Math.max(0, Math.floor(+value) || 0) : String(value).trim().toUpperCase();
@@ -575,10 +891,11 @@ const Core = (() => {
     if (m.type === 'in' && bySku[m.sku].main < m.qty) return 'انسحب من هاي الكمية بعد النقل';
     return null;
   }
-  const canUndo = m => { const age = Date.now() - m.at; return !undoBlocker(m) && age >= 0 && age < CONFIG.rules.undoWindowMs; };
+  const canUndo = m => { const age = Date.now() - m.at; return !readOnly && !undoBlocker(m) && age >= 0 && age < CONFIG.rules.undoWindowMs; };
 
   /** Reverse a move's effect and keep it in the log as undone. */
   function undo(id, { ignoreWindow = false } = {}) {
+    const ro = refuseIfReadOnly(); if (ro) return ro;
     const m = moveById(id);
     const why = undoBlocker(m);
     if (why) return fail(why);
@@ -610,6 +927,7 @@ const Core = (() => {
 
   /** Mark the chosen rows of one kind as entered under a Daftra voucher number. */
   function markEnteredInDaftra({ kind, voucher, excludeSkus = [] }) {
+    const ro = refuseIfReadOnly(); if (ro) return ro;
     const no = String(voucher || '').trim();
     if (!no) return fail('اكتب رقم الإذن اللي طلع بدفترة');
     const group = daftraPending().find(g => g.kind === kind);
@@ -618,6 +936,7 @@ const Core = (() => {
   }
   /** Mark exactly these moves (still pending, of this kind) under one voucher. */
   function markIds({ kind, voucher, ids, at = Date.now() }) {
+    const ro = refuseIfReadOnly(); if (ro) return ro;
     const done = ids.map(moveById).filter(m => m && m.type === kind && !m.undone && !m.daftra);
     if (!done.length) return fail('ماكو شي محدد');
     done.forEach(m => { m.daftra = { voucher, at }; });
@@ -695,6 +1014,7 @@ const Core = (() => {
 
   return {
     DAY, load, importHistory, onChange, onAction, refresh: changed, replay, setDevice, slipCounter, startOfToday,
+    setReadOnly, isReadOnly, setSectionScope, visibleSections,
     item, allItems, photo, allMoves, moveById, peekSlip,
     returnedQty, remaining, openWithdrawals,
     weeklyOut, daysOfCover, isLow, needsTransfer, needsPurchase, suggestedTransfer,
@@ -728,7 +1048,7 @@ const Core = (() => {
 const Sync = (() => {
 
   const S = CONFIG.sync;
-  const KEY = { code: 'azawi.code', server: 'azawi.server.v1', outbox: 'azawi.outbox.v1' };
+  const KEY = { code: STORE_NS + 'code', server: STORE_NS + 'server.v1', outbox: STORE_NS + 'outbox.v1' };
   const DEVICES = { zebra: { idPrefix: 'z', slipPrefix: 'Z-' }, laptop: { idPrefix: 'l', slipPrefix: 'L-' } };
 
   let device = 'zebra', embedded = { items: [], photos: [] };
@@ -789,6 +1109,13 @@ const Sync = (() => {
   /** Put what the server sent into the copy. Returns true if anything changed. */
   function merge(reply) {
     let diff = false;
+    /* who this device is: 'full', or 'view' (+ the person's name) for a view-only code */
+    if (reply.role && (reply.role !== server.role || (reply.viewer || '') !== (server.viewer || ''))) {
+      server.role = reply.role; server.viewer = reply.viewer || ''; diff = true;
+    }
+    if ('sections' in reply && JSON.stringify(reply.sections || null) !== JSON.stringify(server.sections || null)) {
+      server.sections = reply.sections || null; diff = true;        // view-only code limited to these sections
+    }
     (reply.items || []).forEach(i => {
       if (JSON.stringify(server.items[i.sku]) !== JSON.stringify(i)) { server.items[i.sku] = i; diff = true; }
     });
@@ -829,10 +1156,21 @@ const Sync = (() => {
       (op.lines ? op.lines.map(l => l.id) : [op.id]).forEach(id => id && waiting.add(id));
     });
     Core.allMoves().forEach(m => { if (waiting.has(m.id)) m.pending = true; });
+    applyRole();
     Core.refresh();
     dirtyScreen = true;
     tellScreens();
   }
+
+  /** View-only code: core refuses changes, the page hides the action buttons (body.readonly). */
+  function applyRole() {
+    const view = server.role === 'view';
+    Core.setReadOnly(view);
+    Core.setSectionScope(view ? server.sections : null);
+    document.body.classList.toggle('readonly', view);
+    document.body.dataset.viewer = view ? server.viewer : '';
+  }
+  const isViewer = () => server.role === 'view';
 
   /** Ask the app to redraw its current tab. It may say "not now" (someone is typing). */
   function tellScreens() {
@@ -910,6 +1248,11 @@ const Sync = (() => {
     pill.hidden = false;
     const n = outbox.length;
     pill.className = 'sync ' + s;
+    if (isViewer() && s !== 'locked') {           // short: «👁 وسام ●»
+      pill.textContent = `👁 ${server.viewer} ${s === 'online' ? '●' : s === 'offline' ? '○' : '…'}`;
+      pill.title = 'وضع مشاهدة' + (lastOk ? ' · آخر تحديث ' + UI.time(lastOk) : '');
+      return;
+    }
     pill.textContent = s === 'online' ? (n ? `⇅ يرسل ${n}` : '● متصل')
       : s === 'offline' ? (n ? `○ غير متصل · ${n} تنتظر` : '○ غير متصل')
       : s === 'locked' ? '🔒 رمز الجهاز' : '…';
@@ -972,13 +1315,43 @@ const Sync = (() => {
   const framed = () => { try { return window.top !== window; } catch { return true; } };
   const FRAMED_MSG = 'العرض داخل Claude يمنع الاتصال. نزّل الملف وافتحه بـ Chrome';
 
-  function onPillClick() {
+  /* ---------- the menu under the status pill: who this device is + sign out ---------- */
+
+  function closeMenu() { const m = document.getElementById('syncMenu'); if (m) m.remove(); }
+
+  function onPillClick(e) {
+    e.stopPropagation();
     if (state === 'locked') return showCodeBox();
-    const n = outbox.length;
-    UI.toast(state === 'online'
-      ? `متصل · آخر تحديث ${UI.time(lastOk)}${n ? ` · ${n} تنتظر` : ''}`
-      : `غير متصل${n ? ` · ${n} حركة محفوظة بالجهاز وتنرسل لما يرجع الاتصال` : ''}`, state === 'online' ? '' : 'warn');
+    if (document.getElementById('syncMenu')) return closeMenu();
     kick();
+    const n = outbox.length, pill = document.getElementById('syncPill'), r = pill.getBoundingClientRect();
+    const m = document.createElement('div');
+    m.id = 'syncMenu';
+    m.className = 'sync-menu';
+    m.style.top = (r.bottom + 8) + 'px';
+    m.style.left = Math.max(10, Math.min(innerWidth - 250, r.left + r.width / 2 - 115)) + 'px';
+    m.innerHTML = `<div class="acct"><b>${isViewer() ? '👁 ' + UI.esc(server.viewer) + ' · مشاهدة بس' : '● الرمز الكامل'}</b>
+        <small>${state === 'online' ? 'متصل' + (lastOk ? ' · آخر تحديث ' + UI.time(lastOk) : '') : 'غير متصل'}</small></div>
+      ${n ? `<div class="warn">⚠ اكو ${n} حركة بعدها ما انرسلت للقاعدة. ما تكدر تطلع لحد ما يرجع الإنترنت وتنرسل.</div>` : ''}
+      <button type="button" class="out" data-sync="logout" ${n ? 'disabled' : ''}>⎋ خروج من هذا الجهاز</button>`;
+    m.addEventListener('click', ev => {
+      ev.stopPropagation();
+      if (ev.target.closest('[data-sync="logout"]')) logout();
+    });
+    document.body.appendChild(m);
+  }
+
+  /** Forget the code on this device (only when nothing is waiting to be sent). */
+  function logout() {
+    if (outbox.length) return UI.toast(`اكو ${outbox.length} حركة تنتظر الإرسال. انتظر يرجع الإنترنت`, 'bad');
+    closeMenu();
+    clearTimeout(timer);
+    code = '';
+    store.del(KEY.code);
+    store.del(KEY.server);
+    server = { items: {}, moves: {}, vouchers: [], now: 0 };
+    rebuild();                                   // back to the page's own (empty) numbers
+    lock('');
   }
 
   /* ---------- start ---------------------------------------------------------- */
@@ -999,6 +1372,7 @@ const Sync = (() => {
 
     const pill = document.getElementById('syncPill');
     if (pill) pill.addEventListener('click', onPillClick);
+    document.addEventListener('click', closeMenu);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) kick(); });
     addEventListener('online', kick);
 
@@ -1011,7 +1385,7 @@ const Sync = (() => {
   /** The app redraws here after a change from the server. Return false = "not now, I'm busy". */
   function onUpdate(fn) { updateListeners.push(fn); }
 
-  return { start, onUpdate, kick, pending: () => outbox.length, status: () => state };
+  return { start, onUpdate, kick, pending: () => outbox.length, status: () => state, isViewer, viewer: () => server.viewer || '' };
 })();
 </script>
 <script>
@@ -1239,8 +1613,11 @@ const Scanner = (() => {
     tab: 'withdraw',
     withdraw: { worker: null, cart: [], query: '', highlighted: 0, browse: false, section: 'فتنك', group: '', confirmShort: false },
     returns: { query: '', sku: null },
-    log: { worker: 'الكل' },
+    log: { worker: 'الكل', days: 1 },
   };
+  /** View-only device (a code that can only look): no worker, no slip, no actions. */
+  const RO = () => Core.isReadOnly();
+  const RO_TABS = ['withdraw', 'log'];
 
   /* ======================= 2. templates ================================= */
 
@@ -1258,9 +1635,9 @@ const Scanner = (() => {
     const what = m.type === 'in' ? 'من طيران · جابها ' : m.type === 'return' ? 'رجّع · ' : '';
     let button = '';
     if (Core.canUndo(m)) button = `<button class="undo" data-action="undo" data-id="${m.id}">تراجع</button>`;
-    else if (withReturn && m.type === 'out' && !m.undone && returned < m.qty) button = `<button class="return" data-action="returnFrom" data-id="${m.id}">إرجاع</button>`;
+    else if (withReturn && !RO() && m.type === 'out' && !m.undone && returned < m.qty) button = `<button class="return" data-action="returnFrom" data-id="${m.id}">إرجاع</button>`;
     return `<div class="move ${m.undone ? 'undone' : ''}">${photo(i)}
-      <span class="n"><b>${esc(i.name)}</b><small>${what}${esc(m.who)} · ${UI.time(m.at)}${m.slip ? ' · ' + m.slip : ''}${returned ? `<span class="tag blue">رجع ${returned}</span>` : ''}${withDaftra ? UI.daftraTag(m) : ''}</small></span>
+      <span class="n"><b>${esc(i.name)}</b><small>${what}${esc(m.who)} · ${m.at < Core.startOfToday() ? UI.day(m.at) + ' ' : ''}${UI.time(m.at)}${m.slip ? ' · ' + m.slip : ''}${returned ? `<span class="tag blue">رجع ${returned}</span>` : ''}${withDaftra ? UI.daftraTag(m) : ''}</small></span>
       ${button}<span class="q ${cls}">${sign}${m.qty}</span></div>`;
   }
 
@@ -1395,6 +1772,7 @@ const Scanner = (() => {
 
     render() {
       const s = this.s, total = s.cart.reduce((a, l) => a + l.qty, 0);
+      if (RO()) return this.renderViewOnly();
       $('#view').innerHTML = `
         <div class="label">منو ياخذ؟</div>
         ${workerPicker(s.worker, 'worker')}
@@ -1425,7 +1803,7 @@ const Scanner = (() => {
     browseHtml() {
       const s = this.s;
       const inSection = Core.allItems().filter(i => i.section === s.section);
-      return `<div class="chips">${CONFIG.sections.map(sec => {
+      return `<div class="chips">${Core.visibleSections().map(sec => {
           const n = Core.allItems().filter(i => i.section === sec.name).length;
           return `<button class="${sec.name === s.section ? 'on' : ''} ${n ? '' : 'empty-section'}" data-action="section" data-name="${esc(sec.name)}"><i class="dot" style="background:${sec.color}"></i>${esc(sec.name)}</button>`;
         }).join('')}</div>
@@ -1452,9 +1830,25 @@ const Scanner = (() => {
       drawResults('q', s.query, s.highlighted);
     },
 
+    /** View-only: search and photos to look up stock; nothing to save. */
+    renderViewOnly() {
+      const s = this.s;
+      $('#view').innerHTML = `
+        ${searchBox({ id: 'q', value: s.query, placeholder: 'امسح أو اكتب الاسم أو SKU حتى تشوف الرصيد' })}
+        <div class="section-head"><b>${s.browse ? 'اختار من الصور' : 'آخر حركاتك'}</b>
+          <button class="pill ${s.browse ? 'out' : 'good'}" data-action="toggleBrowse">${s.browse ? 'سكّر الصور' : '🖼 الصور'}</button></div>
+        ${s.browse ? this.browseHtml() : Core.allMoves().filter(m => m.type !== 'edit').slice(0, 5).map(m => moveRow(m)).join('') || '<div class="empty">ماكو حركات باسمك بعد.</div>'}`;
+      $('#bottom').innerHTML = '';
+      this.bindSearch();
+    },
+
     /** Add an item to the slip (or change its quantity if already there). */
     add(item) {
       const s = this.s;
+      if (RO()) {                                   // view-only: just show the numbers
+        s.query = ''; const input = $('#q'); if (input) input.value = ''; drawResults('q', '', 0);
+        return UI.toast(`${item.name} · الرئيسي ${item.main} · طيران ${item.tayaran}${item.location ? ' · ' + item.location : ''}`);
+      }
       s.query = '';
       const input = $('#q'); if (input) input.value = '';
       drawResults('q', '', 0);
@@ -1601,17 +1995,23 @@ const Scanner = (() => {
   /* ---------- السجل: today's moves ---------- */
   const log = {
     render() {
-      const who = state.log.worker, today = Core.startOfToday();
-      const list = Core.allMoves().filter(m => m.type !== 'edit' && m.at >= today && (who === 'الكل' || m.who === who));
+      const who = RO() ? 'الكل' : state.log.worker, days = RO() ? state.log.days : 1;
+      const since = Core.startOfToday() - (days - 1) * Core.DAY;
+      const list = Core.allMoves().filter(m => m.type !== 'edit' && m.at >= since && (who === 'الكل' || m.who === who));
       const live = list.filter(m => !m.undone);
       const sum = t => live.filter(m => m.type === t).reduce((a, m) => a + m.qty, 0);
       $('#view').innerHTML = `
-        <div class="chips">${['الكل', ...WORKERS].map(w => `<button class="${w === who ? 'on' : ''}" data-action="worker" data-worker="${esc(w)}">${esc(w)}</button>`).join('')}</div>
-        <div class="section-head"><span>اليوم</span><span>سحب ${sum('out')} · رجع ${sum('return')} · نقل ${sum('in')}</span></div>
-        ${list.map(m => moveRow(m, { withDaftra: true, withReturn: true })).join('') || '<div class="empty">ماكو حركات اليوم.</div>'}`;
+        ${RO()
+          ? `<div class="chips">${[[1, 'اليوم'], [7, '7 أيام'], [30, '30 يوم']].map(([d, t]) => `<button class="${d === days ? 'on' : ''}" data-action="days" data-days="${d}">${t}</button>`).join('')}</div>`
+          : `<div class="chips">${['الكل', ...WORKERS].map(w => `<button class="${w === who ? 'on' : ''}" data-action="worker" data-worker="${esc(w)}">${esc(w)}</button>`).join('')}</div>`}
+        <div class="section-head"><span>${RO() ? 'حركاتك · ' : ''}${days === 1 ? 'اليوم' : 'آخر ' + days + ' يوم'}</span><span>سحب ${sum('out')} · رجع ${sum('return')} · نقل ${sum('in')}</span></div>
+        ${list.map(m => moveRow(m, { withDaftra: true, withReturn: true })).join('') || `<div class="empty">${RO() ? 'ماكو حركات.' : 'ماكو حركات اليوم.'}</div>`}`;
       $('#bottom').innerHTML = '';
     },
-    actions: { worker(d) { state.log.worker = d.worker; log.render(); } },
+    actions: {
+      worker(d) { state.log.worker = d.worker; log.render(); },
+      days(d) { state.log.days = +d.days; log.render(); },
+    },
     onScan(item) { UI.toast(`${item.name} · الرئيسي ${item.main} · طيران ${item.tayaran}`); },
   };
 
@@ -1636,6 +2036,7 @@ const Scanner = (() => {
   }
 
   function switchTab(tab) {
+    if (RO() && !RO_TABS.includes(tab)) tab = 'withdraw';
     state.tab = tab;
     $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
     views[tab].render();
@@ -1686,7 +2087,9 @@ const Scanner = (() => {
 
     /* a change came from the other device: redraw, unless someone is in the middle of something */
     Sync.onUpdate(() => {
+      if (RO() && Qty.isOpen()) Qty.close();
       if (Qty.isOpen() || $('#doneOverlay').classList.contains('on') || document.activeElement?.tagName === 'INPUT') return false;
+      if (RO() && !RO_TABS.includes(state.tab)) return switchTab('withdraw');
       views[state.tab].render();
     });
 
