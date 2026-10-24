@@ -666,6 +666,7 @@ const Core = (() => {
   let device = { idPrefix: 'x', slipPrefix: 'SB-', slipFloor: 1 };
   let replaying = false;                  // true while sync.js re-applies unsent ops
   let readOnly = false;                   // view-only device code: no changes at all
+  let sectionScope = null;                // view-only code limited to some sections (null = all)
   const listeners = [], actionListeners = [];
 
   /* ---------- setup ---------------------------------------------------- */
@@ -736,6 +737,9 @@ const Core = (() => {
 
   /** View-only (set by sync.js from the server's answer). Every change is refused. */
   function setReadOnly(flag) { readOnly = !!flag; }
+  /** Sections this device may see (the server already sends only their items). */
+  function setSectionScope(names) { sectionScope = Array.isArray(names) ? names : null; }
+  const visibleSections = () => (sectionScope ? CONFIG.sections.filter(s => sectionScope.includes(s.name)) : CONFIG.sections);
   const isReadOnly = () => readOnly;
   const refuseIfReadOnly = () => (readOnly && !replaying ? fail('وضع مشاهدة: ما تكدر تسجل حركات') : null);
 
@@ -1010,7 +1014,7 @@ const Core = (() => {
 
   return {
     DAY, load, importHistory, onChange, onAction, refresh: changed, replay, setDevice, slipCounter, startOfToday,
-    setReadOnly, isReadOnly,
+    setReadOnly, isReadOnly, setSectionScope, visibleSections,
     item, allItems, photo, allMoves, moveById, peekSlip,
     returnedQty, remaining, openWithdrawals,
     weeklyOut, daysOfCover, isLow, needsTransfer, needsPurchase, suggestedTransfer,
@@ -1109,6 +1113,9 @@ const Sync = (() => {
     if (reply.role && (reply.role !== server.role || (reply.viewer || '') !== (server.viewer || ''))) {
       server.role = reply.role; server.viewer = reply.viewer || ''; diff = true;
     }
+    if ('sections' in reply && JSON.stringify(reply.sections || null) !== JSON.stringify(server.sections || null)) {
+      server.sections = reply.sections || null; diff = true;        // view-only code limited to these sections
+    }
     (reply.items || []).forEach(i => {
       if (JSON.stringify(server.items[i.sku]) !== JSON.stringify(i)) { server.items[i.sku] = i; diff = true; }
     });
@@ -1159,6 +1166,7 @@ const Sync = (() => {
   function applyRole() {
     const view = server.role === 'view';
     Core.setReadOnly(view);
+    Core.setSectionScope(view ? server.sections : null);
     document.body.classList.toggle('readonly', view);
     document.body.dataset.viewer = view ? server.viewer : '';
   }
@@ -1795,7 +1803,7 @@ const Scanner = (() => {
     browseHtml() {
       const s = this.s;
       const inSection = Core.allItems().filter(i => i.section === s.section);
-      return `<div class="chips">${CONFIG.sections.map(sec => {
+      return `<div class="chips">${Core.visibleSections().map(sec => {
           const n = Core.allItems().filter(i => i.section === sec.name).length;
           return `<button class="${sec.name === s.section ? 'on' : ''} ${n ? '' : 'empty-section'}" data-action="section" data-name="${esc(sec.name)}"><i class="dot" style="background:${sec.color}"></i>${esc(sec.name)}</button>`;
         }).join('')}</div>

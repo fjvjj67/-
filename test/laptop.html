@@ -643,6 +643,7 @@ const Core = (() => {
   let device = { idPrefix: 'x', slipPrefix: 'SB-', slipFloor: 1 };
   let replaying = false;                  // true while sync.js re-applies unsent ops
   let readOnly = false;                   // view-only device code: no changes at all
+  let sectionScope = null;                // view-only code limited to some sections (null = all)
   const listeners = [], actionListeners = [];
 
   /* ---------- setup ---------------------------------------------------- */
@@ -713,6 +714,9 @@ const Core = (() => {
 
   /** View-only (set by sync.js from the server's answer). Every change is refused. */
   function setReadOnly(flag) { readOnly = !!flag; }
+  /** Sections this device may see (the server already sends only their items). */
+  function setSectionScope(names) { sectionScope = Array.isArray(names) ? names : null; }
+  const visibleSections = () => (sectionScope ? CONFIG.sections.filter(s => sectionScope.includes(s.name)) : CONFIG.sections);
   const isReadOnly = () => readOnly;
   const refuseIfReadOnly = () => (readOnly && !replaying ? fail('وضع مشاهدة: ما تكدر تسجل حركات') : null);
 
@@ -987,7 +991,7 @@ const Core = (() => {
 
   return {
     DAY, load, importHistory, onChange, onAction, refresh: changed, replay, setDevice, slipCounter, startOfToday,
-    setReadOnly, isReadOnly,
+    setReadOnly, isReadOnly, setSectionScope, visibleSections,
     item, allItems, photo, allMoves, moveById, peekSlip,
     returnedQty, remaining, openWithdrawals,
     weeklyOut, daysOfCover, isLow, needsTransfer, needsPurchase, suggestedTransfer,
@@ -1086,6 +1090,9 @@ const Sync = (() => {
     if (reply.role && (reply.role !== server.role || (reply.viewer || '') !== (server.viewer || ''))) {
       server.role = reply.role; server.viewer = reply.viewer || ''; diff = true;
     }
+    if ('sections' in reply && JSON.stringify(reply.sections || null) !== JSON.stringify(server.sections || null)) {
+      server.sections = reply.sections || null; diff = true;        // view-only code limited to these sections
+    }
     (reply.items || []).forEach(i => {
       if (JSON.stringify(server.items[i.sku]) !== JSON.stringify(i)) { server.items[i.sku] = i; diff = true; }
     });
@@ -1136,6 +1143,7 @@ const Sync = (() => {
   function applyRole() {
     const view = server.role === 'view';
     Core.setReadOnly(view);
+    Core.setSectionScope(view ? server.sections : null);
     document.body.classList.toggle('readonly', view);
     document.body.dataset.viewer = view ? server.viewer : '';
   }
@@ -1810,7 +1818,7 @@ const Exports = (() => {
 
   const sectionChips = (current, action) =>
     `<button class="chip ${current === 'الكل' ? 'on' : ''}" data-action="${action}" data-name="الكل">الكل</button>` +
-    CONFIG.sections.map(s => {
+    Core.visibleSections().map(s => {
       const n = Core.allItems().filter(i => i.section === s.name).length;
       return `<button class="chip ${current === s.name ? 'on' : ''} ${n ? '' : 'dim'}" data-action="${action}" data-name="${esc(s.name)}"><i class="dot" style="background:${s.color}"></i>${esc(s.name)} <small>${n}</small></button>`;
     }).join('');
@@ -1991,7 +1999,7 @@ const Exports = (() => {
       const counts = { all: Core.allItems().length, low: Core.allItems().filter(Core.isLow).length, buy: Core.needsPurchase().length };
       return `<div class="view panel">
         <div class="panel-head">
-          <select class="field" data-change="section">${['الكل', ...CONFIG.sections.map(x => x.name)].map(n => `<option ${n === s.section ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
+          <select class="field" data-change="section">${['الكل', ...Core.visibleSections().map(x => x.name)].map(n => `<option ${n === s.section ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
           <input class="field" id="tableSearch" style="width:240px" placeholder="⌕ اسم، SKU، باركود أو مكان" value="${esc(s.query)}">
           ${[['all', 'الكل'], ['low', 'تحت الحد'], ['buy', 'ماكو بطيران']].map(([k, t]) => `<button class="chip ${s.filter === k ? 'on' : ''}" data-action="filter" data-filter="${k}">${t} <small>${counts[k]}</small></button>`).join('')}
           <div class="end"><span style="color:var(--muted);font-size:12.5px">الحركات باسم:</span>${workerPicker(s.worker, 'worker', true)}</div>
