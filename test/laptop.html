@@ -213,6 +213,18 @@ body.readonly #main .panel-head .end > span { display: none; }
 .sync-code .err { color: var(--bad); min-height: 1.2em; }
 .sync-code button { background: var(--brand); color: #fff; font-weight: 800; font-size: 16px; padding: 12px; border-radius: 10px; border: 0; }
 .sync-code button:disabled { opacity: .5; }
+
+/* ---- menu under the status pill: who + sign out ---- */
+.sync { cursor: pointer; }
+.sync-menu { position: fixed; z-index: 250; min-width: 230px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 14px; box-shadow: 0 12px 30px #0008; padding: 6px; }
+.sync-menu .acct { padding: 10px 12px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.sync-menu .acct b { display: block; font-size: 15px; color: var(--text); }
+.sync-menu .acct small { color: var(--muted); font-size: 12px; }
+.sync-menu .warn { margin: 6px; padding: 9px 10px; border-radius: 10px; background: #45301a; color: #f6dfb8; font-size: 12.5px; line-height: 1.5; }
+.sync-menu button { display: block; width: 100%; text-align: right; padding: 11px 12px; border-radius: 10px; font-size: 15px;
+  font-weight: 700; background: none; border: 0; color: var(--bad); cursor: pointer; }
+.sync-menu button:disabled { opacity: .4; cursor: default; }
 </style>
 <style id="css-light" media="not all">
 /* ============================================================================
@@ -422,6 +434,18 @@ body.readonly #main .panel-head .end > span { display: none; }
 .sync-code .err { color: var(--bad); min-height: 1.2em; }
 .sync-code button { background: var(--brand); color: #fff; font-weight: 800; font-size: 16px; padding: 12px; border-radius: 10px; border: 0; }
 .sync-code button:disabled { opacity: .5; }
+
+/* ---- menu under the status pill: who + sign out ---- */
+.sync { cursor: pointer; }
+.sync-menu { position: fixed; z-index: 250; min-width: 230px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 14px; box-shadow: 0 12px 30px #0008; padding: 6px; }
+.sync-menu .acct { padding: 10px 12px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.sync-menu .acct b { display: block; font-size: 15px; color: var(--text); }
+.sync-menu .acct small { color: var(--muted); font-size: 12px; }
+.sync-menu .warn { margin: 6px; padding: 9px 10px; border-radius: 10px; background: #fdf0d9; color: #8a5a00; font-size: 12.5px; line-height: 1.5; }
+.sync-menu button { display: block; width: 100%; text-align: right; padding: 11px 12px; border-radius: 10px; font-size: 15px;
+  font-weight: 700; background: none; border: 0; color: var(--bad); cursor: pointer; }
+.sync-menu button:disabled { opacity: .4; cursor: default; }
 
 /* ---- light-only ---- */
 .who[style*="#3a2214"]{background:#fde6d6 !important;color:#b44d0c !important}
@@ -1260,13 +1284,43 @@ const Sync = (() => {
   const framed = () => { try { return window.top !== window; } catch { return true; } };
   const FRAMED_MSG = 'العرض داخل Claude يمنع الاتصال. نزّل الملف وافتحه بـ Chrome';
 
-  function onPillClick() {
+  /* ---------- the menu under the status pill: who this device is + sign out ---------- */
+
+  function closeMenu() { const m = document.getElementById('syncMenu'); if (m) m.remove(); }
+
+  function onPillClick(e) {
+    e.stopPropagation();
     if (state === 'locked') return showCodeBox();
-    const n = outbox.length;
-    UI.toast(state === 'online'
-      ? `متصل · آخر تحديث ${UI.time(lastOk)}${n ? ` · ${n} تنتظر` : ''}`
-      : `غير متصل${n ? ` · ${n} حركة محفوظة بالجهاز وتنرسل لما يرجع الاتصال` : ''}`, state === 'online' ? '' : 'warn');
+    if (document.getElementById('syncMenu')) return closeMenu();
     kick();
+    const n = outbox.length, pill = document.getElementById('syncPill'), r = pill.getBoundingClientRect();
+    const m = document.createElement('div');
+    m.id = 'syncMenu';
+    m.className = 'sync-menu';
+    m.style.top = (r.bottom + 8) + 'px';
+    m.style.left = Math.max(10, Math.min(innerWidth - 250, r.left + r.width / 2 - 115)) + 'px';
+    m.innerHTML = `<div class="acct"><b>${isViewer() ? '👁 ' + UI.esc(server.viewer) + ' · مشاهدة بس' : '● الرمز الكامل'}</b>
+        <small>${state === 'online' ? 'متصل' + (lastOk ? ' · آخر تحديث ' + UI.time(lastOk) : '') : 'غير متصل'}</small></div>
+      ${n ? `<div class="warn">⚠ اكو ${n} حركة بعدها ما انرسلت للقاعدة. ما تكدر تطلع لحد ما يرجع الإنترنت وتنرسل.</div>` : ''}
+      <button type="button" class="out" data-sync="logout" ${n ? 'disabled' : ''}>⎋ خروج من هذا الجهاز</button>`;
+    m.addEventListener('click', ev => {
+      ev.stopPropagation();
+      if (ev.target.closest('[data-sync="logout"]')) logout();
+    });
+    document.body.appendChild(m);
+  }
+
+  /** Forget the code on this device (only when nothing is waiting to be sent). */
+  function logout() {
+    if (outbox.length) return UI.toast(`اكو ${outbox.length} حركة تنتظر الإرسال. انتظر يرجع الإنترنت`, 'bad');
+    closeMenu();
+    clearTimeout(timer);
+    code = '';
+    store.del(KEY.code);
+    store.del(KEY.server);
+    server = { items: {}, moves: {}, vouchers: [], now: 0 };
+    rebuild();                                   // back to the page's own (empty) numbers
+    lock('');
   }
 
   /* ---------- start ---------------------------------------------------------- */
@@ -1287,6 +1341,7 @@ const Sync = (() => {
 
     const pill = document.getElementById('syncPill');
     if (pill) pill.addEventListener('click', onPillClick);
+    document.addEventListener('click', closeMenu);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) kick(); });
     addEventListener('online', kick);
 
