@@ -1770,6 +1770,98 @@ const Exports = (() => {
 })();
 </script>
 <script>
+/* ---- src/laptop/print.js ---- */
+/* ============================================================================
+ * AZAWI · Laptop — printable lists (save as PDF or print on paper)
+ *
+ * The browser draws the page (so Arabic and photos come out right) and its print
+ * window offers "Save as PDF". The page is built in a hidden frame, so nothing
+ * pops up and the app screen is not touched. Always white, A4, right-to-left.
+ * ========================================================================== */
+
+const Printout = (() => {
+  const esc = UI.esc;
+
+  const CSS = `
+    @page { size: A4; margin: 12mm 10mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Cairo, Tahoma, Arial, sans-serif; color: #111; font-size: 12.5px; direction: rtl; }
+    header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #F37221; padding-bottom: 8px; margin-bottom: 10px; }
+    header h1 { font-size: 18px; } header h1 b { color: #F37221; }
+    header .meta { text-align: left; font-size: 11.5px; color: #444; line-height: 1.6; }
+    table { width: 100%; border-collapse: collapse; }
+    thead { display: table-header-group; }              /* header repeats on every page */
+    th { background: #f2f2f2; font-size: 11.5px; padding: 6px; border: 1px solid #ccc; }
+    td { border: 1px solid #ccc; padding: 4px 6px; vertical-align: middle; }
+    tr { page-break-inside: avoid; }
+    td.n { width: 26px; text-align: center; color: #666; }
+    td.ph { width: 74px; text-align: center; }
+    td.ph img { width: 64px; height: 64px; object-fit: contain; display: block; margin: auto; }
+    td.ph .none { width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; color: #bbb; border: 1px dashed #ccc; margin: auto; }
+    td.name b { display: block; font-size: 13.5px; } td.name code { color: #555; font-size: 11px; }
+    td.loc { width: 110px; font-family: monospace; font-size: 13px; text-align: center; }
+    td.q { width: 70px; text-align: center; font-size: 18px; font-weight: 800; }
+    td.ok { width: 46px; } td.ok span { display: block; width: 22px; height: 22px; border: 2px solid #333; border-radius: 4px; margin: auto; }
+    tfoot td { border: 0; padding-top: 10px; font-weight: 700; }
+    .sign { display: flex; gap: 40px; margin-top: 28px; font-size: 12.5px; }
+    .sign div { flex: 1; border-top: 1px solid #333; padding-top: 6px; text-align: center; }
+  `;
+
+  /** Build the page in a hidden frame, wait for the photos, open the print window. */
+  function print(title, bodyHtml) {
+    const frame = document.createElement('iframe');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0;';
+    document.body.appendChild(frame);
+    const doc = frame.contentDocument;
+    doc.open();
+    doc.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title>
+      <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;800&display=swap" rel="stylesheet">
+      <style>${CSS}</style></head><body>${bodyHtml}</body></html>`);
+    doc.close();
+    const imgs = [...doc.images].map(img => (img.complete ? null : new Promise(ok => { img.onload = img.onerror = ok; }))).filter(Boolean);
+    const fonts = doc.fonts && doc.fonts.ready ? doc.fonts.ready : Promise.resolve();
+    Promise.race([Promise.all([...imgs, fonts]), new Promise(ok => setTimeout(ok, 2500))]).then(() => {
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+      setTimeout(() => frame.remove(), 60000);      // keep it while the print window is open
+    });
+    return frame;
+  }
+
+  /**
+   * «قائمة للعامل»: what to bring from طيران to الرئيسي, with photos and a tick box.
+   * @param {{item:object, qty:number}[]} rows
+   * @param {{worker?:string}} meta
+   */
+  function transferList(rows, { worker = '' } = {}) {
+    /* in shelf order (R3-A2, R3-A5, R3-B5 …) so the worker walks the store once; no location last */
+    rows = rows.slice().sort((a, b) => (!a.item.location) - (!b.item.location) ||
+      String(a.item.location).localeCompare(String(b.item.location), 'en', { numeric: true }));
+    const now = Date.now(), total = rows.reduce((a, r) => a + r.qty, 0);
+    const body = `
+      <header><h1><b>AZAWI</b> · قائمة نقل من طيران ← الرئيسي</h1>
+        <div class="meta">${UI.date(now)} · ${UI.time(now)}<br>${rows.length} مادة · ${total} قطعة${worker ? '<br>العامل: ' + esc(worker) : ''}</div></header>
+      <table>
+        <thead><tr><th>#</th><th>الصورة</th><th>المادة</th><th>مكانها بالرئيسي ↓</th><th>الكمية</th><th>✓</th></tr></thead>
+        <tbody>${rows.map((r, k) => {
+          const src = Core.photo(r.item);
+          return `<tr><td class="n">${k + 1}</td>
+            <td class="ph">${src ? `<img src="${src}" alt="">` : '<div class="none">▦</div>'}</td>
+            <td class="name"><b>${esc(r.item.name)}</b><code>${esc(r.item.sku)}</code></td>
+            <td class="loc">${esc(r.item.location || '—')}</td>
+            <td class="q">${r.qty}</td><td class="ok"><span></span></td></tr>`;
+        }).join('')}</tbody>
+        <tfoot><tr><td colspan="6">المجموع: ${rows.length} مادة · ${total} قطعة</td></tr></tfoot>
+      </table>
+      <div class="sign"><div>سلّم (طيران)</div><div>استلم (الرئيسي)</div><div>التاريخ</div></div>`;
+    return print('قائمة نقل من طيران ' + UI.date(now), body);
+  }
+
+  return { transferList, print };
+})();
+</script>
+<script>
 /* ---- src/laptop/laptop.js ---- */
 /* ============================================================================
  * AZAWI · Laptop app — the manager's desk
@@ -2080,7 +2172,7 @@ const Exports = (() => {
         <div class="panel">
           <div class="panel-head"><input class="field" id="transferSearch" style="width:240px" placeholder="⌕ اسم أو SKU" value="${esc(s.query)}">
             <span style="color:var(--muted);font-size:12.5px;margin-inline-start:10px">منو جابها؟</span>${workerPicker(s.worker, 'worker', true)}
-            <div class="end"><button class="btn" data-action="printList">⬇ قائمة للعامل</button>
+            <div class="end"><button class="btn" data-action="printList">⬇ قائمة للعامل (PDF بالصور)</button>
               <button class="btn green" data-action="moveAll" ${chosen.length && s.worker ? '' : 'disabled'}>${!s.worker ? 'اختار منو جابها' : `✓ سجّل نقل المحدد (${chosen.length} مادة · ${total} قطعة)`}</button></div></div>
           ${need.length ? `<div class="scroll"><table>
             <thead><tr><th><input type="checkbox" data-change="all" ${chosen.length === need.length ? 'checked' : ''}></th><th>المادة</th><th>المكان</th><th>الرئيسي / الحد</th><th>طيران</th><th>الرئيسي يكفي</th><th>الكمية للنقل</th><th></th></tr></thead>
@@ -2125,7 +2217,14 @@ const Exports = (() => {
       worker: d => { transfer.syncQuantities(); transfer.s.worker = d.worker; render(); },
       moveOne: d => { transfer.syncQuantities(); const i = Core.item(d.sku); if (transfer.move([i])) UI.toast(`✓ نقل ${i.name} من طيران ← الرئيسي`); render(); },
       moveAll: () => { transfer.syncQuantities(); const n = transfer.move(transfer.selected()); transfer.s.excluded.clear(); UI.toast(`✓ انسجل نقل ${n} مادة من طيران ← الرئيسي`); render(); },
-      printList: () => { transfer.syncQuantities(); UI.downloadCsv('نقل_من_طيران', [['SKU', 'المادة', 'مكانها بالرئيسي', 'الكمية للنقل'], ...transfer.selected().map(i => [i.sku, i.name, i.location, transfer.qtyFor(i)])]); },
+      /* printable list with photos: the print window offers «Save as PDF» or paper */
+      printList: () => {
+        transfer.syncQuantities();
+        const rows = transfer.selected().map(i => ({ item: i, qty: Math.min(transfer.qtyFor(i), i.tayaran) }));
+        if (!rows.length) return UI.toast('ماكو مواد محددة', 'bad');
+        Printout.transferList(rows, { worker: transfer.s.worker });
+        UI.toast('اختار «حفظ كـ PDF» أو اطبعها مباشرة');
+      },
       purchaseList: () => UI.downloadCsv('قائمة_شراء', [['SKU', 'المادة', 'الرئيسي', 'الحد', 'طلع بالأسبوع'], ...Core.needsPurchase().map(i => [i.sku, i.name, i.main, i.min, Core.weeklyOut(i.sku)])]),
     },
     changes: {
