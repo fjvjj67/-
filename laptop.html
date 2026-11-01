@@ -194,6 +194,13 @@ body.readonly #main .panel-head .end .workers { display: none; }
 body.readonly [data-change="location"], body.readonly [data-change="min"] { border-color: transparent; background: transparent; pointer-events: none; }
 body.readonly #main .panel-head .end > span { display: none; }
 
+/* ---- admin: «➕ إضافة» to الرئيسي ---- */
+.modes button.on.add { background: #3a1630; color: #f0a6dc; }
+.workers.reasons button.on { background: #3a1630; border-color: #f0a6dc; color: #f0a6dc; }
+.save.add { background: #3a1630; color: #f0a6dc; border: 1px solid #f0a6dc; }
+.q.add { color: #f0a6dc; }
+.tag.pink { background: #3a1630; color: #f0a6dc; }
+
 /* ---- sync: status pill + one-time device code (both apps) ---- */
 .sync { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line);
   background: var(--card); color: var(--muted); white-space: nowrap; vertical-align: middle; line-height: 1.6; }
@@ -225,6 +232,10 @@ body.readonly #main .panel-head .end > span { display: none; }
 .sync-menu button { display: block; width: 100%; text-align: right; padding: 11px 12px; border-radius: 10px; font-size: 15px;
   font-weight: 700; background: none; border: 0; color: var(--bad); cursor: pointer; }
 .sync-menu button:disabled { opacity: .4; cursor: default; }
+
+/* ---- admin mode (إضافة للرئيسي) ---- */
+.sync-menu button.admin { color: #f0a6dc; }
+.sync-code .cancel { background: none; color: var(--muted); border: 1px solid var(--line); }
 </style>
 <style id="css-light" media="not all">
 /* ============================================================================
@@ -415,6 +426,13 @@ body.readonly #main .panel-head .end .workers { display: none; }
 body.readonly [data-change="location"], body.readonly [data-change="min"] { border-color: transparent; background: transparent; pointer-events: none; }
 body.readonly #main .panel-head .end > span { display: none; }
 
+/* ---- admin: «➕ إضافة» to الرئيسي ---- */
+.modes button.on.add { background: #fbe3f3; color: #9b2a7a; }
+.workers.reasons button.on { background: #fbe3f3; border-color: #9b2a7a; color: #9b2a7a; }
+.save.add { background: #fbe3f3; color: #9b2a7a; border: 1px solid #9b2a7a; }
+.q.add { color: #9b2a7a; }
+.tag.pink { background: #fbe3f3; color: #9b2a7a; }
+
 /* ---- sync: status pill + one-time device code (both apps) ---- */
 .sync { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line);
   background: var(--card); color: var(--muted); white-space: nowrap; vertical-align: middle; line-height: 1.6; }
@@ -446,6 +464,10 @@ body.readonly #main .panel-head .end > span { display: none; }
 .sync-menu button { display: block; width: 100%; text-align: right; padding: 11px 12px; border-radius: 10px; font-size: 15px;
   font-weight: 700; background: none; border: 0; color: var(--bad); cursor: pointer; }
 .sync-menu button:disabled { opacity: .4; cursor: default; }
+
+/* ---- admin mode (إضافة للرئيسي) ---- */
+.sync-menu button.admin { color: #9b2a7a; }
+.sync-code .cancel { background: none; color: var(--muted); border: 1px solid var(--line); }
 
 /* ---- light-only ---- */
 .who[style*="#3a2214"]{background:#fde6d6 !important;color:#b44d0c !important}
@@ -553,6 +575,14 @@ const CONFIG = Object.freeze({
     in: 'نقل من طيران',
     return: 'إرجاع',
     edit: 'تعديل',
+    add: 'إضافة للرئيسي',
+  },
+
+  /* إضافة للرئيسي: admin only (needs the admin PIN). Recorded under this name, with one reason. */
+  admin: {
+    name: 'الإدارة',
+    idleMs: 10 * 60 * 1000,     // admin mode closes by itself after 10 minutes without an add
+    reasons: { purchase: 'وارد / شراء', count: 'تصحيح جرد' },
   },
 
   /* What each pending kind becomes in Daftra. */
@@ -560,6 +590,7 @@ const CONFIG = Object.freeze({
     out: { title: 'إذن صرف من الرئيسي', from: 'الرئيسي', to: 'المحل', file: 'اذن_صرف_الرئيسي' },
     in: { title: 'إذن تحويل: طيران ← الرئيسي', from: 'طيران', to: 'الرئيسي', file: 'اذن_تحويل_طيران' },
     return: { title: 'إذن إرجاع للرئيسي', from: 'المحل', to: 'الرئيسي', file: 'اذن_ارجاع_الرئيسي' },
+    add: { title: 'إذن إضافة للرئيسي', from: 'وارد / جرد', to: 'الرئيسي', file: 'اذن_اضافة_الرئيسي' },
   },
 });
 </script>
@@ -612,10 +643,11 @@ Theme.start();
  * The single source of truth for stock and moves. Both the Zebra app and the
  * laptop app call these functions; neither changes a balance on its own.
  *
- * Stock only ever changes through three moves:
+ * Stock only ever changes through four moves:
  *   out     سحب      الرئيسي − qty                    (someone takes goods)
  *   in      نقل      الرئيسي + qty, طيران − qty      (refill from طيران)
  *   return  إرجاع    الرئيسي + qty                    (always tied to an `out`)
+ *   add     إضافة    الرئيسي + qty                    (admin only: new goods / count fix, with a reason)
  * plus `edit` moves that only record a change of location / minimum.
  *
  * Moves are never deleted. Undo marks a move `undone` and reverses its effect,
@@ -629,7 +661,7 @@ Theme.start();
 const Core = (() => {
 
   /** @typedef {{sku:string,name:string,barcode:string,location:string,section:string,group:string,photo:(number|null),main:number,tayaran:number,min:number}} Item */
-  /** @typedef {{id:string,at:number,type:'out'|'in'|'return'|'edit',sku:string,qty:number,who:string,source:string,slip?:string,ref?:string,field?:string,from?:any,to?:any,undone?:boolean,daftra?:{voucher:string,at:number}}} Move */
+  /** @typedef {{id:string,at:number,type:'out'|'in'|'return'|'edit'|'add',sku:string,qty:number,who:string,source:string,slip?:string,ref?:string,reason?:string,field?:string,from?:any,to?:any,undone?:boolean,daftra?:{voucher:string,at:number}}} Move */
 
   const DAY = 24 * 60 * 60 * 1000;
 
@@ -644,6 +676,8 @@ const Core = (() => {
   let replaying = false;                  // true while sync.js re-applies unsent ops
   let readOnly = false;                   // view-only device code: no changes at all
   let sectionScope = null;                // view-only code limited to some sections (null = all)
+  let negTayaran = false;                 // طيران may go below zero (until it is counted) — set by the server
+  let adminToken = null;                  // admin mode (from the admin PIN, via sync.js); memory only
   const listeners = [], actionListeners = [];
 
   /* ---------- setup ---------------------------------------------------- */
@@ -678,7 +712,7 @@ const Core = (() => {
       items.push({
         sku, barcode, name: String(raw.name).trim(), location: String(raw.location ?? '').trim().toUpperCase(),
         section: String(raw.section ?? '').trim(), group: String(raw.group ?? '').trim(), photo,
-        main: wholeOrZero(raw.main), tayaran: Math.max(0, wholeOrZero(raw.tayaran)), min: Math.max(0, wholeOrZero(raw.min)),
+        main: wholeOrZero(raw.main), tayaran: negTayaran ? wholeOrZero(raw.tayaran) : Math.max(0, wholeOrZero(raw.tayaran)), min: Math.max(0, wholeOrZero(raw.min)),
       });
     }
     bySku = Object.fromEntries(items.map(i => [i.sku, i]));
@@ -714,10 +748,18 @@ const Core = (() => {
 
   /** View-only (set by sync.js from the server's answer). Every change is refused. */
   function setReadOnly(flag) { readOnly = !!flag; }
+  /** طيران not counted yet: transfers may take it below zero (the server's setting decides). */
+  function setNegativeTayaran(flag) { negTayaran = !!flag; }
+  const negativeTayaran = () => negTayaran;
+  /** Most that can come from طيران right now. */
+  const tayaranCap = i => (negTayaran ? Infinity : i.tayaran);
   /** Sections this device may see (the server already sends only their items). */
   function setSectionScope(names) { sectionScope = Array.isArray(names) ? names : null; }
   const visibleSections = () => (sectionScope ? CONFIG.sections.filter(s => sectionScope.includes(s.name)) : CONFIG.sections);
   const isReadOnly = () => readOnly;
+  /** Admin mode: sync.js sets the server's token after the admin PIN; null = closed. */
+  function setAdmin(token) { adminToken = token || null; }
+  const isAdmin = () => !!adminToken && !readOnly;
   const refuseIfReadOnly = () => (readOnly && !replaying ? fail('وضع مشاهدة: ما تكدر تسجل حركات') : null);
 
   function onChange(fn) { listeners.push(fn); }
@@ -762,14 +804,14 @@ const Core = (() => {
   }
   const isLow = i => i.main < i.min;
   /** Low in الرئيسي and طيران has some → transfer. */
-  const needsTransfer = () => items.filter(i => isLow(i) && i.tayaran > 0).sort((a, b) => a.main / a.min - b.main / b.min);
+  const needsTransfer = () => items.filter(i => isLow(i) && (negTayaran || i.tayaran > 0)).sort((a, b) => a.main / a.min - b.main / b.min);
   /** Low in الرئيسي and nothing in طيران → purchase. */
-  const needsPurchase = () => items.filter(i => isLow(i) && i.tayaran <= 0);
+  const needsPurchase = () => items.filter(i => isLow(i) && !negTayaran && i.tayaran <= 0);
   /** Quantity that brings الرئيسي back to min × refillToMinTimes, never more than طيران has. */
   function suggestedTransfer(i) {
     const step = CONFIG.rules.suggestStep;
     const want = Math.round((i.min * CONFIG.rules.refillToMinTimes - i.main) / step) * step;
-    return Math.min(i.tayaran, Math.max(step, want));
+    return Math.min(tayaranCap(i), Math.max(step, want));
   }
 
   /* ---------- changing stock ------------------------------------------ */
@@ -820,11 +862,26 @@ const Core = (() => {
     if (!i) return fail('مادة مو معروفة');
     if (!CONFIG.workers.includes(who)) return fail('اختار منو جابها');
     if (!isWhole(qty)) return fail('العدد لازم رقم صحيح أكبر من صفر');
-    if (qty > i.tayaran) return fail(`بطيران ${i.tayaran} بس`);
+    if (qty > tayaranCap(i)) return fail(`بطيران ${i.tayaran} بس`);
     i.tayaran -= qty;
     i.main += qty;
     const m = record({ type: 'in', sku, qty, who, source }, fixed);
     announce({ op: 'transfer', id: m.id, at: m.at, sku, qty, who, source });
+    changed();
+    return { ok: true, move: m };
+  }
+
+  /** إضافة — admin only: الرئيسي + qty, with a reason (new goods / count fix). */
+  function addStock({ sku, qty, reason, source, token }, fixed = {}) {
+    const ro = refuseIfReadOnly(); if (ro) return ro;
+    if (!replaying && !isAdmin()) return fail('الإضافة للإدارة بس');
+    const i = bySku[sku];
+    if (!i) return fail('مادة مو معروفة');
+    if (!CONFIG.admin.reasons[reason]) return fail('اختار سبب الإضافة');
+    if (!isWhole(qty)) return fail('العدد لازم رقم صحيح أكبر من صفر');
+    i.main += qty;
+    const m = record({ type: 'add', sku, qty, who: CONFIG.admin.name, source, reason }, fixed);
+    announce({ op: 'add', id: m.id, at: m.at, sku, qty, reason, source, token: token || adminToken });
     changed();
     return { ok: true, move: m };
   }
@@ -866,23 +923,25 @@ const Core = (() => {
     if (m.daftra) return 'هاي الحركة نازلة بدفترة، ما يصير تتراجع';
     if (m.type === 'out' && returnedQty(m.id)) return 'هاي السحبة رجع منها شي. تراجع عن الإرجاع أول';
     if (m.type === 'in' && bySku[m.sku].main < m.qty) return 'انسحب من هاي الكمية بعد النقل';
+    if (m.type === 'add' && bySku[m.sku].main < m.qty) return 'انسحب من هاي الكمية بعد الإضافة';
     return null;
   }
-  const canUndo = m => { const age = Date.now() - m.at; return !readOnly && !undoBlocker(m) && age >= 0 && age < CONFIG.rules.undoWindowMs; };
+  const canUndo = m => { const age = Date.now() - m.at; return !readOnly && !undoBlocker(m) && (m.type !== 'add' || isAdmin()) && age >= 0 && age < CONFIG.rules.undoWindowMs; };
 
   /** Reverse a move's effect and keep it in the log as undone. */
-  function undo(id, { ignoreWindow = false } = {}) {
+  function undo(id, { ignoreWindow = false, token } = {}) {
     const ro = refuseIfReadOnly(); if (ro) return ro;
     const m = moveById(id);
     const why = undoBlocker(m);
     if (why) return fail(why);
+    if (m.type === 'add' && !replaying && !isAdmin()) return fail('التراجع عن الإضافة للإدارة بس');
     if (!ignoreWindow && Date.now() - m.at >= CONFIG.rules.undoWindowMs) return fail('فات وقت التراجع');
     const i = bySku[m.sku];
     if (m.type === 'out') i.main += m.qty;
-    if (m.type === 'return') i.main -= m.qty;
+    if (m.type === 'return' || m.type === 'add') i.main -= m.qty;
     if (m.type === 'in') { i.main -= m.qty; i.tayaran += m.qty; }
     m.undone = true;
-    announce({ op: 'undo', moveId: m.id });
+    announce(m.type === 'add' ? { op: 'undo', moveId: m.id, token: token || adminToken } : { op: 'undo', moveId: m.id });
     changed();
     return { ok: true };
   }
@@ -895,8 +954,9 @@ const Core = (() => {
       const list = moves.filter(m => m.type === kind && !m.undone && !m.daftra);
       const rows = {};
       list.forEach(m => {
-        const r = rows[m.sku] || (rows[m.sku] = { sku: m.sku, qty: 0, count: 0, who: new Set(), ids: [] });
+        const r = rows[m.sku] || (rows[m.sku] = { sku: m.sku, qty: 0, count: 0, who: new Set(), reasons: new Set(), ids: [] });
         r.qty += m.qty; r.count++; r.who.add(m.who); r.ids.push(m.id);
+        if (m.reason) r.reasons.add(CONFIG.admin.reasons[m.reason] || m.reason);
       });
       return { kind, moves: list, rows: Object.values(rows).sort((a, b) => b.qty - a.qty) };
     });
@@ -937,9 +997,10 @@ const Core = (() => {
       switch (op.op) {
         case 'withdraw': return withdraw({ who: op.who, source: op.source, allowShort: true, lines: op.lines }, { slip: op.slip, at: op.at });
         case 'transfer': return transfer(op, { id: op.id, at: op.at });
+        case 'add':      return addStock(op, { id: op.id, at: op.at });
         case 'return':   return returnGoods({ outId: op.ref, qty: op.qty, who: op.who, source: op.source }, { id: op.id, at: op.at });
         case 'edit':     return editItem(op, { id: op.id, at: op.at });
-        case 'undo':     return undo(op.moveId, { ignoreWindow: true });
+        case 'undo':     return undo(op.moveId, { ignoreWindow: true, token: op.token });
         case 'daftra':   return markIds(op);
         default:         return fail('عملية مو معروفة');
       }
@@ -991,11 +1052,11 @@ const Core = (() => {
 
   return {
     DAY, load, importHistory, onChange, onAction, refresh: changed, replay, setDevice, slipCounter, startOfToday,
-    setReadOnly, isReadOnly, setSectionScope, visibleSections,
+    setReadOnly, isReadOnly, setAdmin, isAdmin, setSectionScope, visibleSections, setNegativeTayaran, negativeTayaran, tayaranCap,
     item, allItems, photo, allMoves, moveById, peekSlip,
     returnedQty, remaining, openWithdrawals,
     weeklyOut, daysOfCover, isLow, needsTransfer, needsPurchase, suggestedTransfer,
-    withdraw, transfer, returnGoods, editItem, undo, canUndo, undoBlocker,
+    withdraw, transfer, addStock, returnGoods, editItem, undo, canUndo, undoBlocker,
     daftraPending, markEnteredInDaftra, daftraVouchers, pendingDaftraCount,
     search, findByBarcode, normalize,
   };
@@ -1036,6 +1097,8 @@ const Sync = (() => {
   let code = '';
   let state = 'start';          // start | online | offline | locked
   let lastOk = 0, timer = null, running = false, dirtyScreen = false;
+  /* admin mode (إضافة للرئيسي): token from the admin PIN, kept in memory only */
+  let admin = null, adminTimer = null;      // admin = { token, until }
   const updateListeners = [];
 
   /* ---------- storage (never throws) --------------------------------------- */
@@ -1090,6 +1153,7 @@ const Sync = (() => {
     if (reply.role && (reply.role !== server.role || (reply.viewer || '') !== (server.viewer || ''))) {
       server.role = reply.role; server.viewer = reply.viewer || ''; diff = true;
     }
+    if ('negTayaran' in reply && !!reply.negTayaran !== !!server.negTayaran) { server.negTayaran = !!reply.negTayaran; diff = true; }
     if ('sections' in reply && JSON.stringify(reply.sections || null) !== JSON.stringify(server.sections || null)) {
       server.sections = reply.sections || null; diff = true;        // view-only code limited to these sections
     }
@@ -1123,6 +1187,7 @@ const Sync = (() => {
   /** Server copy + queued changes → core.js, then redraw. */
   function rebuild() {
     const items = Object.values(server.items);
+    Core.setNegativeTayaran(!!server.negTayaran);    // before load: negative طيران balances stay as they are
     Core.load({ items: items.length ? items : embedded.items, photos: embedded.photos });
     Core.importHistory(Object.values(server.moves), { vouchers: server.vouchers });
     const waiting = new Set();
@@ -1230,9 +1295,9 @@ const Sync = (() => {
       pill.title = 'وضع مشاهدة' + (lastOk ? ' · آخر تحديث ' + UI.time(lastOk) : '');
       return;
     }
-    pill.textContent = s === 'online' ? (n ? `⇅ يرسل ${n}` : '● متصل')
+    pill.textContent = (admin && s !== 'locked' ? '🔑 ' : '') + (s === 'online' ? (n ? `⇅ يرسل ${n}` : '● متصل')
       : s === 'offline' ? (n ? `○ غير متصل · ${n} تنتظر` : '○ غير متصل')
-      : s === 'locked' ? '🔒 رمز الجهاز' : '…';
+      : s === 'locked' ? '🔒 رمز الجهاز' : '…');
     pill.title = lastOk ? 'آخر تحديث ' + UI.time(lastOk) : '';
   }
 
@@ -1310,10 +1375,15 @@ const Sync = (() => {
     m.innerHTML = `<div class="acct"><b>${isViewer() ? '👁 ' + UI.esc(server.viewer) + ' · مشاهدة بس' : '● الرمز الكامل'}</b>
         <small>${state === 'online' ? 'متصل' + (lastOk ? ' · آخر تحديث ' + UI.time(lastOk) : '') : 'غير متصل'}</small></div>
       ${n ? `<div class="warn">⚠ اكو ${n} حركة بعدها ما انرسلت للقاعدة. ما تكدر تطلع لحد ما يرجع الإنترنت وتنرسل.</div>` : ''}
+      ${isViewer() ? '' : admin
+        ? `<button type="button" class="admin" data-sync="adminOff">🔒 خروج من الإدارة</button>`
+        : `<button type="button" class="admin" data-sync="adminOn">🔑 دخول الإدارة (إضافة عدد)</button>`}
       <button type="button" class="out" data-sync="logout" ${n ? 'disabled' : ''}>⎋ خروج من هذا الجهاز</button>`;
     m.addEventListener('click', ev => {
       ev.stopPropagation();
       if (ev.target.closest('[data-sync="logout"]')) logout();
+      else if (ev.target.closest('[data-sync="adminOn"]')) { closeMenu(); showAdminBox(); }
+      else if (ev.target.closest('[data-sync="adminOff"]')) { closeMenu(); adminOff(); UI.toast('🔒 طلعت من الإدارة'); }
     });
     document.body.appendChild(m);
   }
@@ -1323,12 +1393,79 @@ const Sync = (() => {
     if (outbox.length) return UI.toast(`اكو ${outbox.length} حركة تنتظر الإرسال. انتظر يرجع الإنترنت`, 'bad');
     closeMenu();
     clearTimeout(timer);
+    adminOff(true);
     code = '';
     store.del(KEY.code);
     store.del(KEY.server);
     server = { items: {}, moves: {}, vouchers: [], now: 0 };
     rebuild();                                   // back to the page's own (empty) numbers
     lock('');
+  }
+
+  /* ---------- admin mode: إضافة للرئيسي (admin PIN → 12-hour token from the server) ---------- */
+
+  /** Box for the admin PIN (online only: the server checks it). */
+  function showAdminBox() {
+    let box = document.getElementById('adminCode');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'adminCode';
+      box.className = 'sync-code';
+      box.innerHTML = `<form><b>🔑 دخول الإدارة</b><p>للإضافة على عدد الرئيسي (وارد أو تصحيح جرد). يطلع لحاله بعد 10 دقايق بدون إضافة.</p>
+        <input name="pin" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="رمز الإدارة" dir="ltr">
+        <small class="err"></small><button type="submit">دخول</button><button type="button" class="cancel" data-admin="cancel">إلغاء</button></form>`;
+      document.body.appendChild(box);
+      box.querySelector('form').addEventListener('submit', e => {
+        e.preventDefault();
+        const v = box.querySelector('input').value.trim();
+        if (v) adminLogin(v);
+      });
+      box.querySelector('[data-admin="cancel"]').addEventListener('click', () => box.classList.remove('on'));
+      box.addEventListener('click', e => { if (e.target === box) box.classList.remove('on'); });
+    }
+    box.querySelector('input').value = '';
+    box.querySelector('.err').textContent = state === 'online' ? '' : 'الدخول يحتاج إنترنت';
+    box.classList.add('on');
+    setTimeout(() => box.querySelector('input').focus(), 50);
+  }
+
+  async function adminLogin(pin) {
+    const box = document.getElementById('adminCode'), btn = box.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    try {
+      const r = await rpc('store_admin_login', { p_pin: pin });
+      if (!r.ok) { box.querySelector('.err').textContent = r.error || 'رمز الإدارة غلط'; return; }
+      box.classList.remove('on');
+      admin = { token: r.token, until: r.until };
+      Core.setAdmin(admin.token);
+      adminTouch();
+      document.body.classList.add('admin');
+      setState(state);
+      Core.refresh(); dirtyScreen = true; tellScreens();
+      UI.toast('🔑 دخلت الإدارة: تكدر تضيف عدد للرئيسي');
+    } catch (e) {
+      box.querySelector('.err').textContent = e.kind === 'auth' ? 'رمز الجهاز غلط' : 'ما وصل للسيرفر. تأكد من الإنترنت';
+    } finally { btn.disabled = false; }
+  }
+
+  /** Every add keeps admin mode open another 10 minutes (and never past the token). */
+  function adminTouch() {
+    if (!admin) return;
+    clearTimeout(adminTimer);
+    const left = Math.min(CONFIG.admin.idleMs, admin.until - Date.now() - 60000);
+    if (left <= 0) return adminOff();
+    adminTimer = setTimeout(() => { adminOff(); UI.toast('🔒 انتهى وقت الإدارة', 'warn'); }, left);
+  }
+
+  function adminOff(quiet = false) {
+    clearTimeout(adminTimer);
+    if (!admin) return;
+    admin = null;
+    Core.setAdmin(null);
+    document.body.classList.remove('admin');
+    if (quiet) return;
+    setState(state);
+    Core.refresh(); dirtyScreen = true; tellScreens();
   }
 
   /* ---------- start ---------------------------------------------------------- */
@@ -1345,7 +1482,7 @@ const Sync = (() => {
     outbox = store.get(KEY.outbox, []);
     server = store.get(KEY.server, null) || { items: {}, moves: {}, vouchers: [], now: 0 };
 
-    Core.onAction(op => { outbox.push(op); saveOutbox(); setState(state); kick(); });
+    Core.onAction(op => { if (op.op === 'add') adminTouch(); outbox.push(op); saveOutbox(); setState(state); kick(); });
 
     const pill = document.getElementById('syncPill');
     if (pill) pill.addEventListener('click', onPillClick);
@@ -1362,7 +1499,8 @@ const Sync = (() => {
   /** The app redraws here after a change from the server. Return false = "not now, I'm busy". */
   function onUpdate(fn) { updateListeners.push(fn); }
 
-  return { start, onUpdate, kick, pending: () => outbox.length, status: () => state, isViewer, viewer: () => server.viewer || '' };
+  return { start, onUpdate, kick, pending: () => outbox.length, status: () => state, isViewer, viewer: () => server.viewer || '',
+    isAdmin: () => !!admin, adminOff, showAdminBox };
 })();
 </script>
 <script>
@@ -1438,7 +1576,7 @@ const UI = (() => {
   /** Coloured worker name. */
   const WORKER_COLORS = [['#3a2214', '#ffb27d'], ['#16283d', '#8cc4ff'], ['#173a2b', '#8de3bd'], ['#3a1630', '#f0a6dc']];
   function worker(name) {
-    const [bg, fg] = WORKER_COLORS[Math.max(0, CONFIG.workers.indexOf(name)) % WORKER_COLORS.length];
+    const [bg, fg] = name === CONFIG.admin.name ? WORKER_COLORS[3] : WORKER_COLORS[Math.max(0, CONFIG.workers.indexOf(name)) % WORKER_COLORS.length];
     return `<span class="who" style="background:${bg};color:${fg}">${esc(name)}</span>`;
   }
 
@@ -1491,6 +1629,7 @@ const UI = (() => {
   function moveSign(m) {
     if (m.type === 'out') return { sign: '−', cls: 'out' };
     if (m.type === 'in') return { sign: '+', cls: 'in' };
+    if (m.type === 'add') return { sign: '+', cls: 'add' };
     return { sign: '+', cls: 'ret' };
   }
 
@@ -1698,6 +1837,7 @@ const Exports = (() => {
     const note = m.undone ? 'متراجع عنها'
       : m.type === 'edit' ? `${m.field === 'min' ? 'الحد الأدنى' : 'المكان'}: ${m.from || '—'} ← ${m.to}`
       : m.type === 'out' && Core.returnedQty(m.id) ? `رجع منها ${Core.returnedQty(m.id)}`
+      : m.type === 'add' ? (CONFIG.admin.reasons[m.reason] || '')
       : '';
     return [
       ymd(m.at), hhmm(m.at), kindName(m), m.sku, i.name, i.section, i.location || '',
@@ -1721,7 +1861,7 @@ const Exports = (() => {
     const perItem = Core.allItems().map(i => {
       const mine = live.filter(m => m.sku === i.sku);
       const out = sumFor(mine, 'out'), back = sumFor(mine, 'return'), moved = sumFor(mine, 'in');
-      return [i.sku, i.name, i.section, i.location || '', i.main, i.tayaran, i.min, out, back, out - back, moved, Core.isLow(i) ? 'تحت الحد' : ''];
+      return [i.sku, i.name, i.section, i.location || '', i.main, i.tayaran, i.min, out, back, out - back, moved, sumFor(mine, 'add'), Core.isLow(i) ? 'تحت الحد' : ''];
     });
 
     const perWorker = CONFIG.workers.map(w => {
@@ -1736,7 +1876,7 @@ const Exports = (() => {
         name: 'ملخص المواد',
         columns: [{ header: 'SKU', width: 10 }, { header: 'المادة', width: 28 }, { header: 'القسم', width: 12 }, { header: 'المكان', width: 11 },
           { header: 'الرئيسي الآن', width: 12 }, { header: 'طيران الآن', width: 11 }, { header: 'الحد الأدنى', width: 11 },
-          { header: 'سحب', width: 9 }, { header: 'رجع', width: 9 }, { header: 'صافي الطالع', width: 11 }, { header: 'دخل من طيران', width: 13 }, { header: 'حالة', width: 10 }],
+          { header: 'سحب', width: 9 }, { header: 'رجع', width: 9 }, { header: 'صافي الطالع', width: 11 }, { header: 'دخل من طيران', width: 13 }, { header: 'إضافة', width: 9 }, { header: 'حالة', width: 10 }],
         rows: perItem,
       },
       {
@@ -1756,7 +1896,7 @@ const Exports = (() => {
         name: v.title.replace('إذن تحويل: طيران ← الرئيسي', 'إذن تحويل طيران للرئيسي'),
         columns: [{ header: 'SKU', width: 10 }, { header: 'اسم المادة', width: 30 }, { header: 'الكمية', width: 9 },
           { header: 'من مخزن', width: 10 }, { header: 'إلى مخزن', width: 10 }, { header: 'عدد الحركات', width: 12 }, { header: 'العمال', width: 18 }],
-        rows: g.rows.map(r => [r.sku, Core.item(r.sku).name, r.qty, v.from, v.to, r.count, [...r.who].join('، ')]),
+        rows: g.rows.map(r => [r.sku, Core.item(r.sku).name, r.qty, v.from, v.to, r.count, [...r.who, ...r.reasons].join('، ')]),
       };
     };
     const details = groups.flatMap(g => g.moves).sort((a, b) => b.at - a.at);
@@ -1867,7 +2007,8 @@ const Printout = (() => {
  * AZAWI · Laptop app — the manager's desk
  *
  * Four tabs:
- *   desk      مكتب السحب    record withdrawals, transfers and returns (scanner or mouse)
+ *   desk      مكتب السحب    record withdrawals, transfers and returns (scanner or mouse);
+ *                           in admin mode (admin PIN) also «➕ إضافة» to الرئيسي
  *   table     الجدول        every item in one sheet; edit place / minimum; quick moves
  *   transfer  نقل من طيران  what الرئيسي needs from طيران, with suggested quantities
  *   daftra    دفترة         what still has to be entered by hand in Daftra
@@ -1893,10 +2034,10 @@ const Printout = (() => {
 
   const state = {
     tab: 'desk',
-    desk: { mode: 'out', worker: null, cart: [], query: '', section: 'الكل', group: '', lowOnly: false, returnSku: null, confirmShort: false },
+    desk: { mode: 'out', worker: null, reason: null, cart: [], query: '', section: 'الكل', group: '', lowOnly: false, returnSku: null, confirmShort: false },
     table: { query: '', filter: 'all', section: 'الكل', worker: WORKERS[0], show: 40, flash: null, confirmSku: null },
     transfer: { query: '', worker: null, qty: {}, excluded: new Set() },
-    daftra: { excluded: { out: new Set(), in: new Set(), return: new Set() }, voucher: '', open: null, menu: false },
+    daftra: { excluded: { out: new Set(), in: new Set(), return: new Set(), add: new Set() }, voucher: '', open: null, menu: false },
   };
 
   /* ======================= 2. templates ================================= */
@@ -1944,7 +2085,10 @@ const Printout = (() => {
     },
 
     html() {
-      const s = this.s, list = this.products();
+      const s = this.s;
+      if (s.mode === 'add' && !Core.isAdmin()) { s.mode = 'out'; s.cart = []; }
+      const list = this.products();
+      const modes = [['out', 'سحب'], ['in', 'من طيران'], ['return', 'إرجاع'], ...(Core.isAdmin() ? [['add', '➕ إضافة']] : [])];
       const emptyText = s.section !== 'الكل' && !Core.allItems().some(i => i.section === s.section)
         ? `ماكو مواد بقسم «${esc(s.section)}» بعد. ابعثلي ملفه من دفترة بصوره وأضيفه.` : 'ماكو نتيجة';
       return `<div class="view desk">
@@ -1958,12 +2102,12 @@ const Printout = (() => {
           <div class="products">${list.slice(0, 120).map(i => {
             const inCart = s.mode !== 'return' && s.cart.find(l => l.sku === i.sku);
             return `<button class="product" data-action="add" data-sku="${i.sku}">${photo(i, { zoom: false })}${inCart ? `<span class="in-cart">${inCart.qty}</span>` : ''}<b>${esc(i.name)}</b>
-              <span class="stock"><span>الرئيسي <b class="${Core.isLow(i) ? 'low' : ''}">${i.main}</b></span><span>طيران <b>${i.tayaran}</b></span></span><code style="margin:2px">${i.sku}</code></button>`;
+              <span class="stock"><span>الرئيسي <b class="${Core.isLow(i) ? 'low' : ''}">${i.main}</b></span><span>طيران <b class="${i.tayaran < 0 ? 'low' : ''}">${i.tayaran}</b></span></span><code style="margin:2px">${i.sku}</code></button>`;
           }).join('') || `<p class="empty" style="grid-column:1/-1">${emptyText}</p>`}</div>
         </div>
         <div class="slip">
           <div class="panel"><div class="slip-body">
-            <div class="modes">${[['out', 'سحب'], ['in', 'من طيران'], ['return', 'إرجاع']].map(([m, t]) => `<button class="${m} ${s.mode === m ? 'on' : ''}" data-action="mode" data-mode="${m}">${t}</button>`).join('')}</div>
+            <div class="modes" style="grid-template-columns:repeat(${modes.length},1fr)">${modes.map(([m, t]) => `<button class="${m} ${s.mode === m ? 'on' : ''}" data-action="mode" data-mode="${m}">${t}</button>`).join('')}</div>
             ${s.mode === 'return' ? this.returnsHtml() : this.cartHtml()}
           </div></div>
           <div class="panel"><div class="panel-head"><h3>آخر الحركات</h3><div class="end"><span style="font-size:12px;color:var(--muted)">من الزيبرا واللابتوب</span></div></div>
@@ -1973,6 +2117,7 @@ const Printout = (() => {
 
     cartHtml() {
       const s = this.s, out = s.mode === 'out', total = s.cart.reduce((a, l) => a + l.qty, 0);
+      if (s.mode === 'add') return this.addHtml(total);
       return `<div><div class="slip-label">${out ? 'منو ياخذ؟' : 'منو جابها؟'}</div>${workerPicker(s.worker, 'worker')}</div>
         <div class="lines">${s.cart.length ? s.cart.map((l, k) => {
           const i = Core.item(l.sku), have = out ? i.main : i.tayaran, short = l.qty > have;
@@ -1982,6 +2127,21 @@ const Printout = (() => {
         ${s.cart.length ? `<div class="total"><span>${s.cart.length} مادة</span><span>${total} قطعة</span></div>
           <div style="display:flex;gap:8px"><button class="btn" data-action="clear">إلغاء</button>
           <button class="save ${s.mode}" data-action="save" ${s.worker ? '' : 'disabled'}>${!s.worker ? (out ? 'اختار منو ياخذ' : 'اختار منو جابها') : out ? `حفظ السحب لـ${esc(s.worker)}` : `حفظ النقل (${total})`}</button></div>` : ''}`;
+    },
+
+    /** Admin: add to الرئيسي, with one reason for the whole slip. */
+    addHtml(total) {
+      const s = this.s, reasons = CONFIG.admin.reasons;
+      return `<div><div class="slip-label">سبب الإضافة؟ <small style="color:var(--muted)">تنسجل باسم ${esc(CONFIG.admin.name)}</small></div>
+          <div class="workers reasons">${Object.entries(reasons).map(([k, t]) => `<button class="${k === s.reason ? 'on' : ''}" data-action="reason" data-reason="${k}">${esc(t)}</button>`).join('')}</div></div>
+        <div class="lines">${s.cart.length ? s.cart.map((l, k) => {
+          const i = Core.item(l.sku);
+          return `<div class="line">${photo(i)}<div class="n"><b>${esc(i.name)}</b><small>${i.sku} · الرئيسي ${i.main} ← ${i.main + l.qty}</small></div>
+            <input class="field qty" type="number" min="1" data-change="cartQty" data-k="${k}" value="${l.qty}"><button class="remove" data-action="remove" data-k="${k}">✕</button></div>`;
+        }).join('') : '<div class="empty">اضغط على أي مادة، أو امسحها، واكتب العدد.<br>تنضاف للرئيسي وتطلع بدفترة «إذن إضافة».</div>'}</div>
+        ${s.cart.length ? `<div class="total"><span>${s.cart.length} مادة</span><span>${total} قطعة</span></div>
+          <div style="display:flex;gap:8px"><button class="btn" data-action="clear">إلغاء</button>
+          <button class="save add" data-action="save" ${s.reason ? '' : 'disabled'}>${s.reason ? `حفظ الإضافة (${total}) · ${esc(reasons[s.reason])}` : 'اختار السبب'}</button></div>` : ''}`;
     },
 
     returnsHtml() {
@@ -2022,8 +2182,13 @@ const Printout = (() => {
         if (!res.ok && res.error === 'short') { s.confirmShort = true; return UI.toast('⚠ مادة أكثر من رصيد الرئيسي. اضغط حفظ مرة ثانية للتأكيد', 'bad'); }
         if (!res.ok) return UI.toast(res.error, 'bad');
         UI.toast(`✓ انحفظ ${res.slip} لـ${s.worker}`);
+      } else if (s.mode === 'add') {
+        if (!s.reason) return UI.toast('اختار سبب الإضافة', 'bad');
+        const done = s.cart.map(l => Core.addStock({ sku: l.sku, qty: l.qty, reason: s.reason, source: SOURCE })).filter(r => r.ok).length;
+        if (!done) return UI.toast('الإضافة للإدارة بس', 'bad');
+        UI.toast(`✓ انضاف للرئيسي ${done} مادة (${CONFIG.admin.reasons[s.reason]})`);
       } else {
-        const over = s.cart.filter(l => l.qty > Core.item(l.sku).tayaran);
+        const over = s.cart.filter(l => l.qty > Core.tayaranCap(Core.item(l.sku)));
         if (over.length) return UI.toast(`⚠ ${over.length} مادة أكثر من اللي بطيران. صلّح العدد`, 'bad');
         s.cart.forEach(l => Core.transfer({ who: s.worker, sku: l.sku, qty: l.qty, source: SOURCE }));
         UI.toast(`✓ انضاف للرئيسي ${s.cart.length} مادة من طيران`);
@@ -2060,8 +2225,9 @@ const Printout = (() => {
       section: d => { desk.s.section = d.name; desk.s.group = ''; render(); },
       group: d => { desk.s.group = d.name; render(); },
       lowOnly: () => { desk.s.lowOnly = !desk.s.lowOnly; render(); },
-      mode: d => { desk.s.mode = d.mode; desk.s.cart = []; render(); },
+      mode: d => { desk.s.mode = d.mode; desk.s.cart = []; desk.s.reason = null; render(); },
       worker: d => { desk.s.worker = d.worker; desk.syncQuantities(); render(); },
+      reason: d => { desk.s.reason = d.reason; desk.syncQuantities(); render(); },
       remove: d => { desk.syncQuantities(); desk.s.cart.splice(d.k, 1); render(); },
       clear: () => { desk.s.cart = []; render(); },
       save: () => desk.save(),
@@ -2103,10 +2269,10 @@ const Printout = (() => {
             <td><input class="field loc" data-change="location" data-sku="${i.sku}" value="${esc(i.location || '')}" placeholder="—" ${RO() ? 'readonly' : ''}></td>
             <td class="${Core.isLow(i) ? 'low' : ''}" style="font-size:15px;font-weight:800">${i.main}</td>
             <td><input class="field qty" type="number" min="0" data-change="min" data-sku="${i.sku}" value="${i.min}" ${RO() ? 'readonly' : ''}></td>
-            <td style="font-weight:700">${i.tayaran}</td><td>${Core.weeklyOut(i.sku)}</td><td>${statusTag(i)}</td>
+            <td style="font-weight:700${i.tayaran < 0 ? ';color:var(--bad)' : ''}">${i.tayaran}</td><td>${Core.weeklyOut(i.sku)}</td><td>${statusTag(i)}</td>
             <td><div class="row-actions"><input class="field qty" type="number" min="1" id="quick-${i.sku}" data-enter="withdraw" data-sku="${i.sku}" placeholder="${Core.isLow(i) && i.tayaran > 0 ? Core.suggestedTransfer(i) : 'كم'}">
               <button class="btn small red" data-action="withdraw" data-sku="${i.sku}">سحب</button>
-              <button class="btn small green" data-action="transfer" data-sku="${i.sku}" ${i.tayaran > 0 ? '' : 'disabled'}>من طيران</button></div></td></tr>`).join('')}</tbody>
+              <button class="btn small green" data-action="transfer" data-sku="${i.sku}" ${Core.tayaranCap(i) > 0 ? '' : 'disabled'}>من طيران</button></div></td></tr>`).join('')}</tbody>
         </table>${rows.length > s.show ? `<div class="more"><button class="btn" data-action="more">عرض ${Math.min(40, rows.length - s.show)} بعد (من ${rows.length})</button></div>` : ''}</div>
         <div class="panel-note">✎ المكان والحد الأدنى تعدلهم مباشرة، وكل تعديل ينحفظ بالسجل. اكتب العدد واضغط «سحب» أو «من طيران». إذا تركت العدد فارغ بـ«من طيران»، ياخذ الرقم المقترح.</div>
       </div>`;
@@ -2135,7 +2301,7 @@ const Printout = (() => {
       },
       transfer: d => {
         const s = table.s, i = Core.item(d.sku);
-        const q = Math.min(i.tayaran, table.quickQty(d.sku) || Core.suggestedTransfer(i));
+        const q = Math.min(Core.tayaranCap(i), table.quickQty(d.sku) || Core.suggestedTransfer(i));
         const res = Core.transfer({ who: s.worker, sku: d.sku, qty: q, source: SOURCE });
         if (!res.ok) return UI.toast(res.error, 'bad');
         s.flash = d.sku;
@@ -2160,7 +2326,7 @@ const Printout = (() => {
 
     html() {
       const s = this.s, need = this.list(), buy = Core.needsPurchase(), chosen = this.selected();
-      const total = chosen.reduce((a, i) => a + Math.min(this.qtyFor(i), i.tayaran), 0);
+      const total = chosen.reduce((a, i) => a + Math.min(this.qtyFor(i), Core.tayaranCap(i)), 0);
       const todayIn = Core.allMoves({ includeUndone: false }).filter(m => m.type === 'in' && m.at >= Core.startOfToday());
       return `<div class="view">
         <div class="page-head">
@@ -2182,7 +2348,7 @@ const Printout = (() => {
               <td><b class="low" style="font-size:17px">${i.main}</b> <small style="color:var(--muted)">/ ${i.min}</small><div class="bar"><i style="width:${Math.min(100, i.main / i.min * 100)}%"></i></div></td>
               <td><b style="font-size:16px">${i.tayaran}</b></td>
               <td style="color:var(--muted)">${UI.cover(Core.daysOfCover(i))}</td>
-              <td><input class="field qty" type="number" min="1" max="${i.tayaran}" id="tq-${i.sku}" data-change="qty" data-sku="${i.sku}" value="${this.qtyFor(i)}" style="width:90px;color:var(--ok)"></td>
+              <td><input class="field qty" type="number" min="1" ${Core.negativeTayaran() ? '' : `max="${i.tayaran}"`} id="tq-${i.sku}" data-change="qty" data-sku="${i.sku}" value="${this.qtyFor(i)}" style="width:90px;color:var(--ok)"></td>
               <td><button class="btn small green" data-action="moveOne" data-sku="${i.sku}" ${s.worker ? '' : 'disabled'}>نقل</button></td></tr>`).join('')}</tbody></table></div>`
             : Core.allItems().length ? '<div class="all-good">✓ كلشي زين بالرئيسي، ماكو شي يحتاج نقل</div>' : '<div class="empty">ماكو مواد بعد.</div>'}
         </div>
@@ -2195,14 +2361,14 @@ const Printout = (() => {
     syncQuantities() {
       $$('#main [data-change="qty"]').forEach(x => {
         const i = Core.item(x.dataset.sku);
-        this.s.qty[i.sku] = Math.max(1, Math.min(i.tayaran, int(x.value) || 1));
+        this.s.qty[i.sku] = Math.max(1, Math.min(Core.tayaranCap(i), int(x.value) || 1));
       });
     },
 
     move(items) {
       let count = 0;
       items.forEach(i => {
-        const res = Core.transfer({ who: this.s.worker, sku: i.sku, qty: Math.min(i.tayaran, this.qtyFor(i)), source: SOURCE });
+        const res = Core.transfer({ who: this.s.worker, sku: i.sku, qty: Math.min(Core.tayaranCap(i), this.qtyFor(i)), source: SOURCE });
         if (res.ok) { count++; delete this.s.qty[i.sku]; }
       });
       return count;
@@ -2220,7 +2386,7 @@ const Printout = (() => {
       /* printable list with photos: the print window offers «Save as PDF» or paper */
       printList: () => {
         transfer.syncQuantities();
-        const rows = transfer.selected().map(i => ({ item: i, qty: Math.min(transfer.qtyFor(i), i.tayaran) }));
+        const rows = transfer.selected().map(i => ({ item: i, qty: Math.min(transfer.qtyFor(i), Core.tayaranCap(i)) }));
         if (!rows.length) return UI.toast('ماكو مواد محددة', 'bad');
         Printout.transferList(rows, { worker: transfer.s.worker });
         UI.toast('اختار «حفظ كـ PDF» أو اطبعها مباشرة');
@@ -2228,7 +2394,7 @@ const Printout = (() => {
       purchaseList: () => UI.downloadCsv('قائمة_شراء', [['SKU', 'المادة', 'الرئيسي', 'الحد', 'طلع بالأسبوع'], ...Core.needsPurchase().map(i => [i.sku, i.name, i.main, i.min, Core.weeklyOut(i.sku)])]),
     },
     changes: {
-      qty: (d, el) => { const i = Core.item(d.sku); transfer.s.qty[d.sku] = Math.max(1, Math.min(i.tayaran, int(el.value) || 1)); el.value = transfer.s.qty[d.sku]; },
+      qty: (d, el) => { const i = Core.item(d.sku); transfer.s.qty[d.sku] = Math.max(1, Math.min(Core.tayaranCap(i), int(el.value) || 1)); el.value = transfer.s.qty[d.sku]; },
       pick: (d, el) => { el.checked ? transfer.s.excluded.delete(d.sku) : transfer.s.excluded.add(d.sku); transfer.syncQuantities(); render(); },
       all: (d, el) => { transfer.s.excluded = new Set(el.checked ? [] : transfer.list().map(i => i.sku)); transfer.syncQuantities(); render(); },
     },
@@ -2240,12 +2406,13 @@ const Printout = (() => {
 
     html() {
       const s = this.s, groups = Core.daftraPending(), pending = Core.pendingDaftraCount(), last = Core.daftraVouchers()[0];
-      const colour = { out: 'var(--bad)', in: 'var(--ok)', return: 'var(--blue)' };
-      const tagClass = { out: 'bad', in: 'ok', return: 'blue' };
+      const colour = { out: 'var(--bad)', in: 'var(--ok)', return: 'var(--blue)', add: '#f0a6dc' };
+      const tagClass = { out: 'bad', in: 'ok', return: 'blue', add: 'pink' };
       const help = {
         out: 'كل اللي انسحب من الرئيسي ولسه ما نزل بدفترة. بدفترة تسويه إذن صرف (أو تحويل) من مخزن الرئيسي.',
         in: 'كل اللي انتقل من طيران للرئيسي. بدفترة تسويه إذن تحويل بين المخزنين.',
         return: 'اللي انسحب ورجع للرئيسي. بدفترة تسويه إذن إضافة (أو تحويل عكسي) للرئيسي.',
+        add: 'اللي أضافته الإدارة للرئيسي (وارد أو تصحيح جرد). بدفترة تسويه إذن إضافة لمخزن الرئيسي. ⚠ إذا البضاعة الواردة نزلت بدفترة بفاتورة شراء على الرئيسي، فهي أصلاً انضافت هناك: لا تسوي إذن إضافة ثاني، بس اكتب رقم الفاتورة وعلّمها.',
       };
       return `<div class="view">
         <div class="page-head"><div class="text"><h1 style="display:flex;align-items:center;gap:10px">دفترة
@@ -2266,7 +2433,7 @@ const Printout = (() => {
             <tbody>${g.rows.map(r => {
               const i = Core.item(r.sku), key = g.kind + r.sku;
               return `<tr><td><input type="checkbox" data-change="pick" data-kind="${g.kind}" data-sku="${r.sku}" ${ex.has(r.sku) ? '' : 'checked'}></td>
-                <td>${itemCell(i)}</td><td>${locTag(i)}</td><td style="font-size:18px;font-weight:800;color:${colour[g.kind]}">${r.qty}</td><td>${r.count}</td><td>${[...r.who].map(UI.worker).join(' ')}</td>
+                <td>${itemCell(i)}</td><td>${locTag(i)}</td><td style="font-size:18px;font-weight:800;color:${colour[g.kind]}">${r.qty}</td><td>${r.count}</td><td>${[...r.who].map(UI.worker).join(' ')}${r.reasons.size ? ' <small style="color:var(--muted)">' + [...r.reasons].map(esc).join('، ') + '</small>' : ''}</td>
                 <td><button class="btn small" data-action="details" data-key="${key}">${s.open === key ? 'إخفاء' : 'التفاصيل'}</button></td></tr>
                 ${s.open === key ? r.ids.map(id => { const m = Core.moveById(id); return `<tr class="detail"><td></td><td colspan="2">${UI.day(m.at)} ${UI.time(m.at)} · ${m.slip || ''}</td><td>${m.qty}</td><td></td><td>${UI.worker(m.who)} <span class="src">${esc(m.source)}</span></td><td></td></tr>`; }).join('') : ''}`;
             }).join('')}</tbody></table></div>`;
