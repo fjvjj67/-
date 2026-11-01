@@ -200,6 +200,9 @@ body.readonly #main .panel-head .end > span { display: none; }
 .save.add { background: #3a1630; color: #f0a6dc; border: 1px solid #f0a6dc; }
 .q.add { color: #f0a6dc; }
 .tag.pink { background: #3a1630; color: #f0a6dc; }
+.admin-count { width: 90px; font-weight: 800; border-color: #f0a6dc; }
+.admin-count.low { color: var(--bad); }
+.panel-note.admin-note { color: #f0a6dc; }
 
 /* ---- sync: status pill + one-time device code (both apps) ---- */
 .sync { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line);
@@ -432,6 +435,9 @@ body.readonly #main .panel-head .end > span { display: none; }
 .save.add { background: #fbe3f3; color: #9b2a7a; border: 1px solid #9b2a7a; }
 .q.add { color: #9b2a7a; }
 .tag.pink { background: #fbe3f3; color: #9b2a7a; }
+.admin-count { width: 90px; font-weight: 800; border-color: #9b2a7a; }
+.admin-count.low { color: var(--bad); }
+.panel-note.admin-note { color: #9b2a7a; }
 
 /* ---- sync: status pill + one-time device code (both apps) ---- */
 .sync { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line);
@@ -576,6 +582,7 @@ const CONFIG = Object.freeze({
     return: 'إرجاع',
     edit: 'تعديل',
     add: 'إضافة للرئيسي',
+    adjust: 'تعديل عدد',
   },
 
   /* إضافة للرئيسي: admin only (needs the admin PIN). Recorded under this name, with one reason. */
@@ -591,6 +598,7 @@ const CONFIG = Object.freeze({
     in: { title: 'إذن تحويل: طيران ← الرئيسي', from: 'طيران', to: 'الرئيسي', file: 'اذن_تحويل_طيران' },
     return: { title: 'إذن إرجاع للرئيسي', from: 'المحل', to: 'الرئيسي', file: 'اذن_ارجاع_الرئيسي' },
     add: { title: 'إذن إضافة للرئيسي', from: 'وارد / جرد', to: 'الرئيسي', file: 'اذن_اضافة_الرئيسي' },
+    adjust: { title: 'تسوية جرد (تعديل عدد)', from: 'جرد', to: 'الرئيسي / طيران', file: 'تسوية_جرد' },
   },
 });
 </script>
@@ -648,6 +656,7 @@ Theme.start();
  *   in      نقل      الرئيسي + qty, طيران − qty      (refill from طيران)
  *   return  إرجاع    الرئيسي + qty                    (always tied to an `out`)
  *   add     إضافة    الرئيسي + qty                    (admin only: new goods / count fix, with a reason)
+ *   adjust  تعديل    الرئيسي or طيران = exact count   (admin only, after counting; from → to kept)
  * plus `edit` moves that only record a change of location / minimum.
  *
  * Moves are never deleted. Undo marks a move `undone` and reverses its effect,
@@ -661,7 +670,7 @@ Theme.start();
 const Core = (() => {
 
   /** @typedef {{sku:string,name:string,barcode:string,location:string,section:string,group:string,photo:(number|null),main:number,tayaran:number,min:number}} Item */
-  /** @typedef {{id:string,at:number,type:'out'|'in'|'return'|'edit'|'add',sku:string,qty:number,who:string,source:string,slip?:string,ref?:string,reason?:string,field?:string,from?:any,to?:any,undone?:boolean,daftra?:{voucher:string,at:number}}} Move */
+  /** @typedef {{id:string,at:number,type:'out'|'in'|'return'|'edit'|'add'|'adjust',sku:string,qty:number,who:string,source:string,slip?:string,ref?:string,reason?:string,field?:string,from?:any,to?:any,undone?:boolean,daftra?:{voucher:string,at:number}}} Move */
 
   const DAY = 24 * 60 * 60 * 1000;
 
@@ -886,6 +895,26 @@ const Core = (() => {
     return { ok: true, move: m };
   }
 
+  /** تعديل العدد — admin only: set الرئيسي or طيران to the exact counted number. */
+  function setStock({ sku, field, to, source, token }, fixed = {}) {
+    const ro = refuseIfReadOnly(); if (ro) return ro;
+    if (!replaying && !isAdmin()) return fail('تعديل العدد للإدارة بس');
+    const i = bySku[sku];
+    if (!i) return fail('مادة مو معروفة');
+    if (!['main', 'tayaran'].includes(field)) return fail('تعديل مو مسموح');
+    if (!Number.isInteger(to) || Math.abs(to) > 9999999) return fail('العدد لازم رقم صحيح');
+    if (to < 0 && (field === 'main' || !negTayaran)) return fail('العدد ما يصير بالسالب');
+    const from = i[field];
+    if (to === from) return { ok: true, unchanged: true };
+    i[field] = to;
+    const m = record({ type: 'adjust', sku, qty: Math.abs(to - from), who: CONFIG.admin.name, source, field, from: String(from), to: String(to) }, fixed);
+    announce({ op: 'adjust', id: m.id, at: m.at, sku, field, to, source, token: token || adminToken });
+    changed();
+    return { ok: true, move: m };
+  }
+  /** Change of an adjust move (+ more, − less). */
+  const adjustDelta = m => (+m.to || 0) - (+m.from || 0);
+
   /** إرجاع — always against the withdrawal it came from; never more than is left. */
   function returnGoods({ outId, qty, who, source }, fixed = {}) {
     const ro = refuseIfReadOnly(); if (ro) return ro;
@@ -926,7 +955,7 @@ const Core = (() => {
     if (m.type === 'add' && bySku[m.sku].main < m.qty) return 'انسحب من هاي الكمية بعد الإضافة';
     return null;
   }
-  const canUndo = m => { const age = Date.now() - m.at; return !readOnly && !undoBlocker(m) && (m.type !== 'add' || isAdmin()) && age >= 0 && age < CONFIG.rules.undoWindowMs; };
+  const canUndo = m => { const age = Date.now() - m.at; return !readOnly && !undoBlocker(m) && (!['add', 'adjust'].includes(m.type) || isAdmin()) && age >= 0 && age < CONFIG.rules.undoWindowMs; };
 
   /** Reverse a move's effect and keep it in the log as undone. */
   function undo(id, { ignoreWindow = false, token } = {}) {
@@ -934,14 +963,15 @@ const Core = (() => {
     const m = moveById(id);
     const why = undoBlocker(m);
     if (why) return fail(why);
-    if (m.type === 'add' && !replaying && !isAdmin()) return fail('التراجع عن الإضافة للإدارة بس');
+    if (['add', 'adjust'].includes(m.type) && !replaying && !isAdmin()) return fail('التراجع عن هاي الحركة للإدارة بس');
     if (!ignoreWindow && Date.now() - m.at >= CONFIG.rules.undoWindowMs) return fail('فات وقت التراجع');
     const i = bySku[m.sku];
     if (m.type === 'out') i.main += m.qty;
     if (m.type === 'return' || m.type === 'add') i.main -= m.qty;
     if (m.type === 'in') { i.main -= m.qty; i.tayaran += m.qty; }
+    if (m.type === 'adjust') i[m.field] -= adjustDelta(m);
     m.undone = true;
-    announce(m.type === 'add' ? { op: 'undo', moveId: m.id, token: token || adminToken } : { op: 'undo', moveId: m.id });
+    announce(['add', 'adjust'].includes(m.type) ? { op: 'undo', moveId: m.id, token: token || adminToken } : { op: 'undo', moveId: m.id });
     changed();
     return { ok: true };
   }
@@ -954,11 +984,13 @@ const Core = (() => {
       const list = moves.filter(m => m.type === kind && !m.undone && !m.daftra);
       const rows = {};
       list.forEach(m => {
-        const r = rows[m.sku] || (rows[m.sku] = { sku: m.sku, qty: 0, count: 0, who: new Set(), reasons: new Set(), ids: [] });
-        r.qty += m.qty; r.count++; r.who.add(m.who); r.ids.push(m.id);
+        const key = kind === 'adjust' ? m.sku + '|' + m.field : m.sku;
+        const r = rows[key] || (rows[key] = { sku: m.sku, qty: 0, count: 0, who: new Set(), reasons: new Set(), ids: [] });
+        r.qty += kind === 'adjust' ? adjustDelta(m) : m.qty; r.count++; r.who.add(m.who); r.ids.push(m.id);
+        if (kind === 'adjust') { r.field = m.field; r.reasons.add(CONFIG.stores[m.field]); }
         if (m.reason) r.reasons.add(CONFIG.admin.reasons[m.reason] || m.reason);
       });
-      return { kind, moves: list, rows: Object.values(rows).sort((a, b) => b.qty - a.qty) };
+      return { kind, moves: list, rows: Object.values(rows).sort((a, b) => Math.abs(b.qty) - Math.abs(a.qty)) };
     });
   }
 
@@ -998,6 +1030,7 @@ const Core = (() => {
         case 'withdraw': return withdraw({ who: op.who, source: op.source, allowShort: true, lines: op.lines }, { slip: op.slip, at: op.at });
         case 'transfer': return transfer(op, { id: op.id, at: op.at });
         case 'add':      return addStock(op, { id: op.id, at: op.at });
+        case 'adjust':   return setStock(op, { id: op.id, at: op.at });
         case 'return':   return returnGoods({ outId: op.ref, qty: op.qty, who: op.who, source: op.source }, { id: op.id, at: op.at });
         case 'edit':     return editItem(op, { id: op.id, at: op.at });
         case 'undo':     return undo(op.moveId, { ignoreWindow: true, token: op.token });
@@ -1056,7 +1089,7 @@ const Core = (() => {
     item, allItems, photo, allMoves, moveById, peekSlip,
     returnedQty, remaining, openWithdrawals,
     weeklyOut, daysOfCover, isLow, needsTransfer, needsPurchase, suggestedTransfer,
-    withdraw, transfer, addStock, returnGoods, editItem, undo, canUndo, undoBlocker,
+    withdraw, transfer, addStock, setStock, adjustDelta, returnGoods, editItem, undo, canUndo, undoBlocker,
     daftraPending, markEnteredInDaftra, daftraVouchers, pendingDaftraCount,
     search, findByBarcode, normalize,
   };
@@ -1630,6 +1663,7 @@ const UI = (() => {
     if (m.type === 'out') return { sign: '−', cls: 'out' };
     if (m.type === 'in') return { sign: '+', cls: 'in' };
     if (m.type === 'add') return { sign: '+', cls: 'add' };
+    if (m.type === 'adjust') return Core.adjustDelta(m) >= 0 ? { sign: '+', cls: 'add' } : { sign: '−', cls: 'out' };
     return { sign: '+', cls: 'ret' };
   }
 
@@ -1833,11 +1867,13 @@ const Exports = (() => {
   /** One row per move, newest first, with everything needed to audit it. */
   function moveRow(m) {
     const i = Core.item(m.sku);
-    const effect = m.undone || m.type === 'edit' ? 0 : m.type === 'out' ? -m.qty : m.qty;
+    const effect = m.undone || m.type === 'edit' ? 0 : m.type === 'out' ? -m.qty
+      : m.type === 'adjust' ? (m.field === 'main' ? Core.adjustDelta(m) : 0) : m.qty;
     const note = m.undone ? 'متراجع عنها'
       : m.type === 'edit' ? `${m.field === 'min' ? 'الحد الأدنى' : 'المكان'}: ${m.from || '—'} ← ${m.to}`
       : m.type === 'out' && Core.returnedQty(m.id) ? `رجع منها ${Core.returnedQty(m.id)}`
       : m.type === 'add' ? (CONFIG.admin.reasons[m.reason] || '')
+      : m.type === 'adjust' ? `${CONFIG.stores[m.field]}: ${m.from} ← ${m.to}`
       : '';
     return [
       ymd(m.at), hhmm(m.at), kindName(m), m.sku, i.name, i.section, i.location || '',
@@ -2008,7 +2044,8 @@ const Printout = (() => {
  *
  * Four tabs:
  *   desk      مكتب السحب    record withdrawals, transfers and returns (scanner or mouse);
- *                           in admin mode (admin PIN) also «➕ إضافة» to الرئيسي
+ *                           in admin mode (admin code) also «➕ إضافة» to الرئيسي
+ *   (table: in admin mode the الرئيسي and طيران counts can be typed in directly = «تعديل العدد»)
  *   table     الجدول        every item in one sheet; edit place / minimum; quick moves
  *   transfer  نقل من طيران  what الرئيسي needs from طيران, with suggested quantities
  *   daftra    دفترة         what still has to be entered by hand in Daftra
@@ -2037,7 +2074,7 @@ const Printout = (() => {
     desk: { mode: 'out', worker: null, reason: null, cart: [], query: '', section: 'الكل', group: '', lowOnly: false, returnSku: null, confirmShort: false },
     table: { query: '', filter: 'all', section: 'الكل', worker: WORKERS[0], show: 40, flash: null, confirmSku: null },
     transfer: { query: '', worker: null, qty: {}, excluded: new Set() },
-    daftra: { excluded: { out: new Set(), in: new Set(), return: new Set(), add: new Set() }, voucher: '', open: null, menu: false },
+    daftra: { excluded: { out: new Set(), in: new Set(), return: new Set(), add: new Set(), adjust: new Set() }, voucher: '', open: null, menu: false },
   };
 
   /* ======================= 2. templates ================================= */
@@ -2263,17 +2300,22 @@ const Printout = (() => {
           <div class="end"><span style="color:var(--muted);font-size:12.5px">الحركات باسم:</span>${workerPicker(s.worker, 'worker', true)}</div>
         </div>
         <div class="scroll"><table>
-          <thead><tr><th>المادة</th><th>المكان ✎</th><th>الرئيسي</th><th>الحد ✎</th><th>طيران</th><th>طلع بالأسبوع</th><th>الحالة</th><th>حركة سريعة</th></tr></thead>
+          <thead><tr><th>المادة</th><th>المكان ✎</th><th>الرئيسي${Core.isAdmin() ? ' ✎' : ''}</th><th>الحد ✎</th><th>طيران${Core.isAdmin() ? ' ✎' : ''}</th><th>طلع بالأسبوع</th><th>الحالة</th><th>حركة سريعة</th></tr></thead>
           <tbody>${rows.slice(0, s.show).map(i => `<tr class="${s.flash === i.sku ? 'saved' : ''}">
             <td>${itemCell(i)}</td>
             <td><input class="field loc" data-change="location" data-sku="${i.sku}" value="${esc(i.location || '')}" placeholder="—" ${RO() ? 'readonly' : ''}></td>
-            <td class="${Core.isLow(i) ? 'low' : ''}" style="font-size:15px;font-weight:800">${i.main}</td>
+            ${Core.isAdmin()
+              ? `<td><input class="field qty admin-count ${Core.isLow(i) ? 'low' : ''}" type="number" min="0" data-change="count" data-field="main" data-sku="${i.sku}" value="${i.main}" title="تعديل العدد (الإدارة)"></td>`
+              : `<td class="${Core.isLow(i) ? 'low' : ''}" style="font-size:15px;font-weight:800">${i.main}</td>`}
             <td><input class="field qty" type="number" min="0" data-change="min" data-sku="${i.sku}" value="${i.min}" ${RO() ? 'readonly' : ''}></td>
-            <td style="font-weight:700${i.tayaran < 0 ? ';color:var(--bad)' : ''}">${i.tayaran}</td><td>${Core.weeklyOut(i.sku)}</td><td>${statusTag(i)}</td>
+            ${Core.isAdmin()
+              ? `<td><input class="field qty admin-count" type="number" data-change="count" data-field="tayaran" data-sku="${i.sku}" value="${i.tayaran}" title="تعديل العدد (الإدارة)"${i.tayaran < 0 ? ' style="color:var(--bad)"' : ''}></td>`
+              : `<td style="font-weight:700${i.tayaran < 0 ? ';color:var(--bad)' : ''}">${i.tayaran}</td>`}<td>${Core.weeklyOut(i.sku)}</td><td>${statusTag(i)}</td>
             <td><div class="row-actions"><input class="field qty" type="number" min="1" id="quick-${i.sku}" data-enter="withdraw" data-sku="${i.sku}" placeholder="${Core.isLow(i) && i.tayaran > 0 ? Core.suggestedTransfer(i) : 'كم'}">
               <button class="btn small red" data-action="withdraw" data-sku="${i.sku}">سحب</button>
               <button class="btn small green" data-action="transfer" data-sku="${i.sku}" ${Core.tayaranCap(i) > 0 ? '' : 'disabled'}>من طيران</button></div></td></tr>`).join('')}</tbody>
         </table>${rows.length > s.show ? `<div class="more"><button class="btn" data-action="more">عرض ${Math.min(40, rows.length - s.show)} بعد (من ${rows.length})</button></div>` : ''}</div>
+        ${Core.isAdmin() ? '<div class="panel-note admin-note">🔑 وضع الإدارة: تكدر تكتب العدد الصحيح للرئيسي وطيران مباشرة بالجدول (بعد الجرد). كل تعديل ينسجل باسم الإدارة (من ← إلى) ويطلع بدفترة «تسوية جرد».</div>' : ''}
         <div class="panel-note">✎ المكان والحد الأدنى تعدلهم مباشرة، وكل تعديل ينحفظ بالسجل. اكتب العدد واضغط «سحب» أو «من طيران». إذا تركت العدد فارغ بـ«من طيران»، ياخذ الرقم المقترح.</div>
       </div>`;
     },
@@ -2313,6 +2355,16 @@ const Printout = (() => {
       section: (d, el) => { table.s.section = el.value; table.s.show = 40; render(); },
       location: (d, el) => { const r = Core.editItem({ sku: d.sku, field: 'location', value: el.value, source: SOURCE }); el.value = Core.item(d.sku).location; if (r.ok && !r.unchanged) UI.toast(`✓ المكان: ${r.value || '—'}`); },
       min: (d, el) => { const r = Core.editItem({ sku: d.sku, field: 'min', value: el.value, source: SOURCE }); el.value = Core.item(d.sku).min; if (r.ok && !r.unchanged) { UI.toast(`✓ الحد الأدنى: ${r.value}`); table.s.flash = d.sku; render(); } },
+      /* admin: the exact counted number of الرئيسي / طيران */
+      count: (d, el) => {
+        const i = Core.item(d.sku), before = i[d.field], raw = el.value.trim();
+        if (raw === '' || !/^-?\d+$/.test(raw)) { el.value = before; return UI.toast('اكتب رقم صحيح', 'bad'); }
+        const r = Core.setStock({ sku: d.sku, field: d.field, to: parseInt(raw, 10), source: SOURCE });
+        if (!r.ok) { el.value = before; return UI.toast(r.error, 'bad'); }
+        if (r.unchanged) return;
+        UI.toast(`✓ ${i.name} · ${CONFIG.stores[d.field]}: ${before} ← ${i[d.field]}`);
+        table.s.flash = d.sku; render();
+      },
     },
   };
 
@@ -2406,12 +2458,13 @@ const Printout = (() => {
 
     html() {
       const s = this.s, groups = Core.daftraPending(), pending = Core.pendingDaftraCount(), last = Core.daftraVouchers()[0];
-      const colour = { out: 'var(--bad)', in: 'var(--ok)', return: 'var(--blue)', add: '#f0a6dc' };
-      const tagClass = { out: 'bad', in: 'ok', return: 'blue', add: 'pink' };
+      const colour = { out: 'var(--bad)', in: 'var(--ok)', return: 'var(--blue)', add: '#f0a6dc', adjust: '#f0a6dc' };
+      const tagClass = { out: 'bad', in: 'ok', return: 'blue', add: 'pink', adjust: 'pink' };
       const help = {
         out: 'كل اللي انسحب من الرئيسي ولسه ما نزل بدفترة. بدفترة تسويه إذن صرف (أو تحويل) من مخزن الرئيسي.',
         in: 'كل اللي انتقل من طيران للرئيسي. بدفترة تسويه إذن تحويل بين المخزنين.',
         return: 'اللي انسحب ورجع للرئيسي. بدفترة تسويه إذن إضافة (أو تحويل عكسي) للرئيسي.',
+        adjust: 'تعديلات العدد اللي سوتها الإدارة بعد الجرد، بالفرق (+ زيادة، − نقص) ولأي مخزن. بدفترة تسويها تسوية جرد (أو إذن إضافة / صرف) على نفس المخزن.',
         add: 'اللي أضافته الإدارة للرئيسي (وارد أو تصحيح جرد). بدفترة تسويه إذن إضافة لمخزن الرئيسي. ⚠ إذا البضاعة الواردة نزلت بدفترة بفاتورة شراء على الرئيسي، فهي أصلاً انضافت هناك: لا تسوي إذن إضافة ثاني، بس اكتب رقم الفاتورة وعلّمها.',
       };
       return `<div class="view">
@@ -2433,7 +2486,7 @@ const Printout = (() => {
             <tbody>${g.rows.map(r => {
               const i = Core.item(r.sku), key = g.kind + r.sku;
               return `<tr><td><input type="checkbox" data-change="pick" data-kind="${g.kind}" data-sku="${r.sku}" ${ex.has(r.sku) ? '' : 'checked'}></td>
-                <td>${itemCell(i)}</td><td>${locTag(i)}</td><td style="font-size:18px;font-weight:800;color:${colour[g.kind]}">${r.qty}</td><td>${r.count}</td><td>${[...r.who].map(UI.worker).join(' ')}${r.reasons.size ? ' <small style="color:var(--muted)">' + [...r.reasons].map(esc).join('، ') + '</small>' : ''}</td>
+                <td>${itemCell(i)}</td><td>${locTag(i)}</td><td style="font-size:18px;font-weight:800;color:${colour[g.kind]}">${g.kind === 'adjust' && r.qty > 0 ? '+' : ''}${r.qty}</td><td>${r.count}</td><td>${[...r.who].map(UI.worker).join(' ')}${r.reasons.size ? ' <small style="color:var(--muted)">' + [...r.reasons].map(esc).join('، ') + '</small>' : ''}</td>
                 <td><button class="btn small" data-action="details" data-key="${key}">${s.open === key ? 'إخفاء' : 'التفاصيل'}</button></td></tr>
                 ${s.open === key ? r.ids.map(id => { const m = Core.moveById(id); return `<tr class="detail"><td></td><td colspan="2">${UI.day(m.at)} ${UI.time(m.at)} · ${m.slip || ''}</td><td>${m.qty}</td><td></td><td>${UI.worker(m.who)} <span class="src">${esc(m.source)}</span></td><td></td></tr>`; }).join('') : ''}`;
             }).join('')}</tbody></table></div>`;
