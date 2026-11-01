@@ -202,6 +202,18 @@ body.readonly .tabs [data-tab="returns"], body.readonly .tabs [data-tab="transfe
 body.readonly .tabs [data-tab="withdraw"] { font-size: 0; }
 body.readonly .tabs [data-tab="withdraw"]::after { content: 'بحث'; font-size: 14px; }
 
+/* ---- admin: «➕ إضافة للرئيسي» inside the من طيران tab ---- */
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 4px; margin-bottom: 10px; }
+.seg button { padding: 9px 4px; border-radius: 10px; font-weight: 800; font-size: 14px; color: var(--muted); }
+.seg button.on { background: #173a2b; color: #bff0d8; }
+.seg button.add.on { background: #3a1630; color: #f0a6dc; }
+.hero.add { background: #3a1630; border-color: #3a1630; }
+.hero.add .big small { color: #f0a6dc; }
+.mode.add { background: #3a1630; color: #f0a6dc; }
+.q.add { color: #f0a6dc; }
+.workers.reasons { grid-template-columns: 1fr 1fr; }
+.workers.reasons button.on { background: #3a1630; border-color: #f0a6dc; color: #f0a6dc; box-shadow: none; }
+
 /* ---- sync: status pill + one-time device code (both apps) ---- */
 .sync { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line);
   background: var(--card); color: var(--muted); white-space: nowrap; vertical-align: middle; line-height: 1.6; }
@@ -233,6 +245,10 @@ body.readonly .tabs [data-tab="withdraw"]::after { content: 'بحث'; font-size:
 .sync-menu button { display: block; width: 100%; text-align: right; padding: 11px 12px; border-radius: 10px; font-size: 15px;
   font-weight: 700; background: none; border: 0; color: var(--bad); cursor: pointer; }
 .sync-menu button:disabled { opacity: .4; cursor: default; }
+
+/* ---- admin mode (إضافة للرئيسي) ---- */
+.sync-menu button.admin { color: #f0a6dc; }
+.sync-code .cancel { background: none; color: var(--muted); border: 1px solid var(--line); }
 </style>
 <style id="css-light" media="not all">
 /* ============================================================================
@@ -431,6 +447,18 @@ body.readonly .tabs [data-tab="returns"], body.readonly .tabs [data-tab="transfe
 body.readonly .tabs [data-tab="withdraw"] { font-size: 0; }
 body.readonly .tabs [data-tab="withdraw"]::after { content: 'بحث'; font-size: 14px; }
 
+/* ---- admin: «➕ إضافة للرئيسي» inside the من طيران tab ---- */
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 4px; margin-bottom: 10px; }
+.seg button { padding: 9px 4px; border-radius: 10px; font-weight: 800; font-size: 14px; color: var(--muted); }
+.seg button.on { background: #dff5ea; color: #136b45; }
+.seg button.add.on { background: #fbe3f3; color: #9b2a7a; }
+.hero.add { background: #fbe3f3; border-color: #fbe3f3; }
+.hero.add .big small { color: #9b2a7a; }
+.mode.add { background: #fbe3f3; color: #9b2a7a; }
+.q.add { color: #9b2a7a; }
+.workers.reasons { grid-template-columns: 1fr 1fr; }
+.workers.reasons button.on { background: #fbe3f3; border-color: #9b2a7a; color: #9b2a7a; box-shadow: none; }
+
 /* ---- sync: status pill + one-time device code (both apps) ---- */
 .sync { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line);
   background: var(--card); color: var(--muted); white-space: nowrap; vertical-align: middle; line-height: 1.6; }
@@ -462,6 +490,10 @@ body.readonly .tabs [data-tab="withdraw"]::after { content: 'بحث'; font-size:
 .sync-menu button { display: block; width: 100%; text-align: right; padding: 11px 12px; border-radius: 10px; font-size: 15px;
   font-weight: 700; background: none; border: 0; color: var(--bad); cursor: pointer; }
 .sync-menu button:disabled { opacity: .4; cursor: default; }
+
+/* ---- admin mode (إضافة للرئيسي) ---- */
+.sync-menu button.admin { color: #9b2a7a; }
+.sync-code .cancel { background: none; color: var(--muted); border: 1px solid var(--line); }
 
 /* ---- light-only ---- */
 .who[style*="#3a2214"]{background:#fde6d6 !important;color:#b44d0c !important}
@@ -576,6 +608,14 @@ const CONFIG = Object.freeze({
     in: 'نقل من طيران',
     return: 'إرجاع',
     edit: 'تعديل',
+    add: 'إضافة للرئيسي',
+  },
+
+  /* إضافة للرئيسي: admin only (needs the admin PIN). Recorded under this name, with one reason. */
+  admin: {
+    name: 'الإدارة',
+    idleMs: 10 * 60 * 1000,     // admin mode closes by itself after 10 minutes without an add
+    reasons: { purchase: 'وارد / شراء', count: 'تصحيح جرد' },
   },
 
   /* What each pending kind becomes in Daftra. */
@@ -583,6 +623,7 @@ const CONFIG = Object.freeze({
     out: { title: 'إذن صرف من الرئيسي', from: 'الرئيسي', to: 'المحل', file: 'اذن_صرف_الرئيسي' },
     in: { title: 'إذن تحويل: طيران ← الرئيسي', from: 'طيران', to: 'الرئيسي', file: 'اذن_تحويل_طيران' },
     return: { title: 'إذن إرجاع للرئيسي', from: 'المحل', to: 'الرئيسي', file: 'اذن_ارجاع_الرئيسي' },
+    add: { title: 'إذن إضافة للرئيسي', from: 'وارد / جرد', to: 'الرئيسي', file: 'اذن_اضافة_الرئيسي' },
   },
 });
 </script>
@@ -635,10 +676,11 @@ Theme.start();
  * The single source of truth for stock and moves. Both the Zebra app and the
  * laptop app call these functions; neither changes a balance on its own.
  *
- * Stock only ever changes through three moves:
+ * Stock only ever changes through four moves:
  *   out     سحب      الرئيسي − qty                    (someone takes goods)
  *   in      نقل      الرئيسي + qty, طيران − qty      (refill from طيران)
  *   return  إرجاع    الرئيسي + qty                    (always tied to an `out`)
+ *   add     إضافة    الرئيسي + qty                    (admin only: new goods / count fix, with a reason)
  * plus `edit` moves that only record a change of location / minimum.
  *
  * Moves are never deleted. Undo marks a move `undone` and reverses its effect,
@@ -652,7 +694,7 @@ Theme.start();
 const Core = (() => {
 
   /** @typedef {{sku:string,name:string,barcode:string,location:string,section:string,group:string,photo:(number|null),main:number,tayaran:number,min:number}} Item */
-  /** @typedef {{id:string,at:number,type:'out'|'in'|'return'|'edit',sku:string,qty:number,who:string,source:string,slip?:string,ref?:string,field?:string,from?:any,to?:any,undone?:boolean,daftra?:{voucher:string,at:number}}} Move */
+  /** @typedef {{id:string,at:number,type:'out'|'in'|'return'|'edit'|'add',sku:string,qty:number,who:string,source:string,slip?:string,ref?:string,reason?:string,field?:string,from?:any,to?:any,undone?:boolean,daftra?:{voucher:string,at:number}}} Move */
 
   const DAY = 24 * 60 * 60 * 1000;
 
@@ -668,6 +710,7 @@ const Core = (() => {
   let readOnly = false;                   // view-only device code: no changes at all
   let sectionScope = null;                // view-only code limited to some sections (null = all)
   let negTayaran = false;                 // طيران may go below zero (until it is counted) — set by the server
+  let adminToken = null;                  // admin mode (from the admin PIN, via sync.js); memory only
   const listeners = [], actionListeners = [];
 
   /* ---------- setup ---------------------------------------------------- */
@@ -747,6 +790,9 @@ const Core = (() => {
   function setSectionScope(names) { sectionScope = Array.isArray(names) ? names : null; }
   const visibleSections = () => (sectionScope ? CONFIG.sections.filter(s => sectionScope.includes(s.name)) : CONFIG.sections);
   const isReadOnly = () => readOnly;
+  /** Admin mode: sync.js sets the server's token after the admin PIN; null = closed. */
+  function setAdmin(token) { adminToken = token || null; }
+  const isAdmin = () => !!adminToken && !readOnly;
   const refuseIfReadOnly = () => (readOnly && !replaying ? fail('وضع مشاهدة: ما تكدر تسجل حركات') : null);
 
   function onChange(fn) { listeners.push(fn); }
@@ -858,6 +904,21 @@ const Core = (() => {
     return { ok: true, move: m };
   }
 
+  /** إضافة — admin only: الرئيسي + qty, with a reason (new goods / count fix). */
+  function addStock({ sku, qty, reason, source, token }, fixed = {}) {
+    const ro = refuseIfReadOnly(); if (ro) return ro;
+    if (!replaying && !isAdmin()) return fail('الإضافة للإدارة بس');
+    const i = bySku[sku];
+    if (!i) return fail('مادة مو معروفة');
+    if (!CONFIG.admin.reasons[reason]) return fail('اختار سبب الإضافة');
+    if (!isWhole(qty)) return fail('العدد لازم رقم صحيح أكبر من صفر');
+    i.main += qty;
+    const m = record({ type: 'add', sku, qty, who: CONFIG.admin.name, source, reason }, fixed);
+    announce({ op: 'add', id: m.id, at: m.at, sku, qty, reason, source, token: token || adminToken });
+    changed();
+    return { ok: true, move: m };
+  }
+
   /** إرجاع — always against the withdrawal it came from; never more than is left. */
   function returnGoods({ outId, qty, who, source }, fixed = {}) {
     const ro = refuseIfReadOnly(); if (ro) return ro;
@@ -895,23 +956,25 @@ const Core = (() => {
     if (m.daftra) return 'هاي الحركة نازلة بدفترة، ما يصير تتراجع';
     if (m.type === 'out' && returnedQty(m.id)) return 'هاي السحبة رجع منها شي. تراجع عن الإرجاع أول';
     if (m.type === 'in' && bySku[m.sku].main < m.qty) return 'انسحب من هاي الكمية بعد النقل';
+    if (m.type === 'add' && bySku[m.sku].main < m.qty) return 'انسحب من هاي الكمية بعد الإضافة';
     return null;
   }
-  const canUndo = m => { const age = Date.now() - m.at; return !readOnly && !undoBlocker(m) && age >= 0 && age < CONFIG.rules.undoWindowMs; };
+  const canUndo = m => { const age = Date.now() - m.at; return !readOnly && !undoBlocker(m) && (m.type !== 'add' || isAdmin()) && age >= 0 && age < CONFIG.rules.undoWindowMs; };
 
   /** Reverse a move's effect and keep it in the log as undone. */
-  function undo(id, { ignoreWindow = false } = {}) {
+  function undo(id, { ignoreWindow = false, token } = {}) {
     const ro = refuseIfReadOnly(); if (ro) return ro;
     const m = moveById(id);
     const why = undoBlocker(m);
     if (why) return fail(why);
+    if (m.type === 'add' && !replaying && !isAdmin()) return fail('التراجع عن الإضافة للإدارة بس');
     if (!ignoreWindow && Date.now() - m.at >= CONFIG.rules.undoWindowMs) return fail('فات وقت التراجع');
     const i = bySku[m.sku];
     if (m.type === 'out') i.main += m.qty;
-    if (m.type === 'return') i.main -= m.qty;
+    if (m.type === 'return' || m.type === 'add') i.main -= m.qty;
     if (m.type === 'in') { i.main -= m.qty; i.tayaran += m.qty; }
     m.undone = true;
-    announce({ op: 'undo', moveId: m.id });
+    announce(m.type === 'add' ? { op: 'undo', moveId: m.id, token: token || adminToken } : { op: 'undo', moveId: m.id });
     changed();
     return { ok: true };
   }
@@ -924,8 +987,9 @@ const Core = (() => {
       const list = moves.filter(m => m.type === kind && !m.undone && !m.daftra);
       const rows = {};
       list.forEach(m => {
-        const r = rows[m.sku] || (rows[m.sku] = { sku: m.sku, qty: 0, count: 0, who: new Set(), ids: [] });
+        const r = rows[m.sku] || (rows[m.sku] = { sku: m.sku, qty: 0, count: 0, who: new Set(), reasons: new Set(), ids: [] });
         r.qty += m.qty; r.count++; r.who.add(m.who); r.ids.push(m.id);
+        if (m.reason) r.reasons.add(CONFIG.admin.reasons[m.reason] || m.reason);
       });
       return { kind, moves: list, rows: Object.values(rows).sort((a, b) => b.qty - a.qty) };
     });
@@ -966,9 +1030,10 @@ const Core = (() => {
       switch (op.op) {
         case 'withdraw': return withdraw({ who: op.who, source: op.source, allowShort: true, lines: op.lines }, { slip: op.slip, at: op.at });
         case 'transfer': return transfer(op, { id: op.id, at: op.at });
+        case 'add':      return addStock(op, { id: op.id, at: op.at });
         case 'return':   return returnGoods({ outId: op.ref, qty: op.qty, who: op.who, source: op.source }, { id: op.id, at: op.at });
         case 'edit':     return editItem(op, { id: op.id, at: op.at });
-        case 'undo':     return undo(op.moveId, { ignoreWindow: true });
+        case 'undo':     return undo(op.moveId, { ignoreWindow: true, token: op.token });
         case 'daftra':   return markIds(op);
         default:         return fail('عملية مو معروفة');
       }
@@ -1020,11 +1085,11 @@ const Core = (() => {
 
   return {
     DAY, load, importHistory, onChange, onAction, refresh: changed, replay, setDevice, slipCounter, startOfToday,
-    setReadOnly, isReadOnly, setSectionScope, visibleSections, setNegativeTayaran, negativeTayaran, tayaranCap,
+    setReadOnly, isReadOnly, setAdmin, isAdmin, setSectionScope, visibleSections, setNegativeTayaran, negativeTayaran, tayaranCap,
     item, allItems, photo, allMoves, moveById, peekSlip,
     returnedQty, remaining, openWithdrawals,
     weeklyOut, daysOfCover, isLow, needsTransfer, needsPurchase, suggestedTransfer,
-    withdraw, transfer, returnGoods, editItem, undo, canUndo, undoBlocker,
+    withdraw, transfer, addStock, returnGoods, editItem, undo, canUndo, undoBlocker,
     daftraPending, markEnteredInDaftra, daftraVouchers, pendingDaftraCount,
     search, findByBarcode, normalize,
   };
@@ -1065,6 +1130,8 @@ const Sync = (() => {
   let code = '';
   let state = 'start';          // start | online | offline | locked
   let lastOk = 0, timer = null, running = false, dirtyScreen = false;
+  /* admin mode (إضافة للرئيسي): token from the admin PIN, kept in memory only */
+  let admin = null, adminTimer = null;      // admin = { token, until }
   const updateListeners = [];
 
   /* ---------- storage (never throws) --------------------------------------- */
@@ -1261,9 +1328,9 @@ const Sync = (() => {
       pill.title = 'وضع مشاهدة' + (lastOk ? ' · آخر تحديث ' + UI.time(lastOk) : '');
       return;
     }
-    pill.textContent = s === 'online' ? (n ? `⇅ يرسل ${n}` : '● متصل')
+    pill.textContent = (admin && s !== 'locked' ? '🔑 ' : '') + (s === 'online' ? (n ? `⇅ يرسل ${n}` : '● متصل')
       : s === 'offline' ? (n ? `○ غير متصل · ${n} تنتظر` : '○ غير متصل')
-      : s === 'locked' ? '🔒 رمز الجهاز' : '…';
+      : s === 'locked' ? '🔒 رمز الجهاز' : '…');
     pill.title = lastOk ? 'آخر تحديث ' + UI.time(lastOk) : '';
   }
 
@@ -1341,10 +1408,15 @@ const Sync = (() => {
     m.innerHTML = `<div class="acct"><b>${isViewer() ? '👁 ' + UI.esc(server.viewer) + ' · مشاهدة بس' : '● الرمز الكامل'}</b>
         <small>${state === 'online' ? 'متصل' + (lastOk ? ' · آخر تحديث ' + UI.time(lastOk) : '') : 'غير متصل'}</small></div>
       ${n ? `<div class="warn">⚠ اكو ${n} حركة بعدها ما انرسلت للقاعدة. ما تكدر تطلع لحد ما يرجع الإنترنت وتنرسل.</div>` : ''}
+      ${isViewer() ? '' : admin
+        ? `<button type="button" class="admin" data-sync="adminOff">🔒 خروج من الإدارة</button>`
+        : `<button type="button" class="admin" data-sync="adminOn">🔑 دخول الإدارة (إضافة عدد)</button>`}
       <button type="button" class="out" data-sync="logout" ${n ? 'disabled' : ''}>⎋ خروج من هذا الجهاز</button>`;
     m.addEventListener('click', ev => {
       ev.stopPropagation();
       if (ev.target.closest('[data-sync="logout"]')) logout();
+      else if (ev.target.closest('[data-sync="adminOn"]')) { closeMenu(); showAdminBox(); }
+      else if (ev.target.closest('[data-sync="adminOff"]')) { closeMenu(); adminOff(); UI.toast('🔒 طلعت من الإدارة'); }
     });
     document.body.appendChild(m);
   }
@@ -1354,12 +1426,79 @@ const Sync = (() => {
     if (outbox.length) return UI.toast(`اكو ${outbox.length} حركة تنتظر الإرسال. انتظر يرجع الإنترنت`, 'bad');
     closeMenu();
     clearTimeout(timer);
+    adminOff(true);
     code = '';
     store.del(KEY.code);
     store.del(KEY.server);
     server = { items: {}, moves: {}, vouchers: [], now: 0 };
     rebuild();                                   // back to the page's own (empty) numbers
     lock('');
+  }
+
+  /* ---------- admin mode: إضافة للرئيسي (admin PIN → 12-hour token from the server) ---------- */
+
+  /** Box for the admin PIN (online only: the server checks it). */
+  function showAdminBox() {
+    let box = document.getElementById('adminCode');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'adminCode';
+      box.className = 'sync-code';
+      box.innerHTML = `<form><b>🔑 دخول الإدارة</b><p>للإضافة على عدد الرئيسي (وارد أو تصحيح جرد). يطلع لحاله بعد 10 دقايق بدون إضافة.</p>
+        <input name="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="رمز الإدارة" dir="ltr">
+        <small class="err"></small><button type="submit">دخول</button><button type="button" class="cancel" data-admin="cancel">إلغاء</button></form>`;
+      document.body.appendChild(box);
+      box.querySelector('form').addEventListener('submit', e => {
+        e.preventDefault();
+        const v = box.querySelector('input').value.trim();
+        if (v) adminLogin(v);
+      });
+      box.querySelector('[data-admin="cancel"]').addEventListener('click', () => box.classList.remove('on'));
+      box.addEventListener('click', e => { if (e.target === box) box.classList.remove('on'); });
+    }
+    box.querySelector('input').value = '';
+    box.querySelector('.err').textContent = state === 'online' ? '' : 'الدخول يحتاج إنترنت';
+    box.classList.add('on');
+    setTimeout(() => box.querySelector('input').focus(), 50);
+  }
+
+  async function adminLogin(pin) {
+    const box = document.getElementById('adminCode'), btn = box.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    try {
+      const r = await rpc('store_admin_login', { p_pin: pin });
+      if (!r.ok) { box.querySelector('.err').textContent = r.error || 'رمز الإدارة غلط'; return; }
+      box.classList.remove('on');
+      admin = { token: r.token, until: r.until };
+      Core.setAdmin(admin.token);
+      adminTouch();
+      document.body.classList.add('admin');
+      setState(state);
+      Core.refresh(); dirtyScreen = true; tellScreens();
+      UI.toast('🔑 دخلت الإدارة: تكدر تضيف عدد للرئيسي');
+    } catch (e) {
+      box.querySelector('.err').textContent = e.kind === 'auth' ? 'رمز الجهاز غلط' : 'ما وصل للسيرفر. تأكد من الإنترنت';
+    } finally { btn.disabled = false; }
+  }
+
+  /** Every add keeps admin mode open another 10 minutes (and never past the token). */
+  function adminTouch() {
+    if (!admin) return;
+    clearTimeout(adminTimer);
+    const left = Math.min(CONFIG.admin.idleMs, admin.until - Date.now() - 60000);
+    if (left <= 0) return adminOff();
+    adminTimer = setTimeout(() => { adminOff(); UI.toast('🔒 انتهى وقت الإدارة', 'warn'); }, left);
+  }
+
+  function adminOff(quiet = false) {
+    clearTimeout(adminTimer);
+    if (!admin) return;
+    admin = null;
+    Core.setAdmin(null);
+    document.body.classList.remove('admin');
+    if (quiet) return;
+    setState(state);
+    Core.refresh(); dirtyScreen = true; tellScreens();
   }
 
   /* ---------- start ---------------------------------------------------------- */
@@ -1376,7 +1515,7 @@ const Sync = (() => {
     outbox = store.get(KEY.outbox, []);
     server = store.get(KEY.server, null) || { items: {}, moves: {}, vouchers: [], now: 0 };
 
-    Core.onAction(op => { outbox.push(op); saveOutbox(); setState(state); kick(); });
+    Core.onAction(op => { if (op.op === 'add') adminTouch(); outbox.push(op); saveOutbox(); setState(state); kick(); });
 
     const pill = document.getElementById('syncPill');
     if (pill) pill.addEventListener('click', onPillClick);
@@ -1393,7 +1532,8 @@ const Sync = (() => {
   /** The app redraws here after a change from the server. Return false = "not now, I'm busy". */
   function onUpdate(fn) { updateListeners.push(fn); }
 
-  return { start, onUpdate, kick, pending: () => outbox.length, status: () => state, isViewer, viewer: () => server.viewer || '' };
+  return { start, onUpdate, kick, pending: () => outbox.length, status: () => state, isViewer, viewer: () => server.viewer || '',
+    isAdmin: () => !!admin, adminOff, showAdminBox };
 })();
 </script>
 <script>
@@ -1469,7 +1609,7 @@ const UI = (() => {
   /** Coloured worker name. */
   const WORKER_COLORS = [['#3a2214', '#ffb27d'], ['#16283d', '#8cc4ff'], ['#173a2b', '#8de3bd'], ['#3a1630', '#f0a6dc']];
   function worker(name) {
-    const [bg, fg] = WORKER_COLORS[Math.max(0, CONFIG.workers.indexOf(name)) % WORKER_COLORS.length];
+    const [bg, fg] = name === CONFIG.admin.name ? WORKER_COLORS[3] : WORKER_COLORS[Math.max(0, CONFIG.workers.indexOf(name)) % WORKER_COLORS.length];
     return `<span class="who" style="background:${bg};color:${fg}">${esc(name)}</span>`;
   }
 
@@ -1522,6 +1662,7 @@ const UI = (() => {
   function moveSign(m) {
     if (m.type === 'out') return { sign: '−', cls: 'out' };
     if (m.type === 'in') return { sign: '+', cls: 'in' };
+    if (m.type === 'add') return { sign: '+', cls: 'add' };
     return { sign: '+', cls: 'ret' };
   }
 
@@ -1599,6 +1740,7 @@ const Scanner = (() => {
  * AZAWI · Zebra TC27 app — the warehouse manager's handheld
  *
  * Four tabs:  سحب (withdraw) · إرجاع (returns) · من طيران (transfer) · السجل (log)
+ * In admin mode (admin PIN) the من طيران tab also has «➕ إضافة للرئيسي».
  *
  * How the code is laid out:
  *   1. state            what is on screen right now
@@ -1621,6 +1763,7 @@ const Scanner = (() => {
     tab: 'withdraw',
     withdraw: { worker: null, cart: [], query: '', highlighted: 0, browse: false, section: 'فتنك', group: '', confirmShort: false },
     returns: { query: '', sku: null },
+    transfer: { mode: 'tayaran', query: '' },
     log: { worker: 'الكل', days: 1 },
   };
   /** View-only device (a code that can only look): no worker, no slip, no actions. */
@@ -1640,7 +1783,8 @@ const Scanner = (() => {
     const i = Core.item(m.sku);
     const { sign, cls } = UI.moveSign(m);
     const returned = m.type === 'out' ? Core.returnedQty(m.id) : 0;
-    const what = m.type === 'in' ? 'من طيران · جابها ' : m.type === 'return' ? 'رجّع · ' : '';
+    const what = m.type === 'in' ? 'من طيران · جابها ' : m.type === 'return' ? 'رجّع · '
+      : m.type === 'add' ? `إضافة · ${esc(CONFIG.admin.reasons[m.reason] || '')} · ` : '';
     let button = '';
     if (Core.canUndo(m)) button = `<button class="undo" data-action="undo" data-id="${m.id}">تراجع</button>`;
     else if (withReturn && !RO() && m.type === 'out' && !m.undone && returned < m.qty) button = `<button class="return" data-action="returnFrom" data-id="${m.id}">إرجاع</button>`;
@@ -1672,20 +1816,21 @@ const Scanner = (() => {
 
   /* ======================= 3. quantity sheet ============================ */
   /*
-   * open({ item, mode:'out'|'in'|'return', start, defaultQty, max, taken,
-   *        quick:[…], askWorker, worker, label:q=>text, onSave:(qty, worker, overLimit)=>{} })
+   * open({ item, mode:'out'|'in'|'return'|'add', start, defaultQty, max, taken,
+   *        quick:[…], askWorker, worker, askReason, label:q=>text, onSave:(qty, worker, overLimit, reason)=>{} })
    * - out    : more than الرئيسي needs a second tap (stock on screen may lag reality)
    * - in     : never more than طيران has
    * - return : never more than is left of that withdrawal
+   * - add    : admin only, no upper limit, needs a reason
    */
   const Qty = {
-    opts: null, buffer: '', worker: null, confirming: false, guard: Scanner.burstGuard(),
+    opts: null, buffer: '', worker: null, reason: null, confirming: false, guard: Scanner.burstGuard(),
 
     isOpen: () => $('#qtyOverlay').classList.contains('on'),
     value() { return +this.buffer || this.opts.defaultQty || 0; },
     limit() {
       const { item, mode, max } = this.opts;
-      return mode === 'in' ? Core.tayaranCap(item) : mode === 'return' ? max : item.main;
+      return mode === 'in' ? Core.tayaranCap(item) : mode === 'return' ? max : mode === 'add' ? Infinity : item.main;
     },
 
     open(opts) {
@@ -1693,6 +1838,7 @@ const Scanner = (() => {
       this.opts = opts;
       this.buffer = opts.start != null ? String(opts.start) : '';
       this.worker = opts.worker || null;
+      this.reason = null;
       this.confirming = false;
       this.guard.reset();
       this.draw();
@@ -1708,9 +1854,11 @@ const Scanner = (() => {
         out: 'سحب من الرئيسي',
         in: 'نقل: طيران ← الرئيسي',
         return: `إرجاع للرئيسي · أخذ ${o.taken} · باقي يرجع ${o.max}`,
+        add: `➕ إضافة للرئيسي · ${esc(CONFIG.admin.name)}`,
       }[o.mode];
-      const blocked = !q || (o.askWorker && !this.worker) || (over && o.mode !== 'out');
+      const blocked = !q || (o.askWorker && !this.worker) || (o.askReason && !this.reason) || (over && o.mode !== 'out');
       const buttonText = !q ? 'اكتب العدد'
+        : o.askReason && !this.reason ? 'اختار السبب'
         : o.askWorker && !this.worker ? (o.mode === 'out' ? 'اختار منو ياخذ' : o.mode === 'in' ? 'اختار منو جابها' : 'اختار منو رجّعها')
         : over && o.mode === 'out' && this.confirming ? '⚠ اضغط مرة ثانية للتأكيد'
         : o.label(q);
@@ -1730,6 +1878,8 @@ const Scanner = (() => {
         <div class="keypad">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 'مسح', 0, '⌫'].map(k =>
           `<button class="${typeof k === 'string' ? 'fn' : ''}" data-key="${k}">${k}</button>`).join('')}</div>
         ${o.askWorker ? workerPicker(this.worker, 'sheetWorker') : ''}
+        ${o.askReason ? `<div class="workers reasons ${this.reason ? '' : 'needed'}">${Object.entries(CONFIG.admin.reasons).map(([k, t]) =>
+          `<button class="${k === this.reason ? 'on' : ''}" data-action="sheetReason" data-reason="${k}">${esc(t)}</button>`).join('')}</div>` : ''}
         <button class="save ${over && this.confirming ? 'confirm' : ''}" data-key="save" ${blocked ? 'disabled' : ''}>${buttonText}</button>
         ${warning ? `<div class="warning">${warning}</div>` : ''}`;
     },
@@ -1746,12 +1896,12 @@ const Scanner = (() => {
 
     save() {
       const o = this.opts, q = this.value();
-      if (!q || (o.askWorker && !this.worker)) return;
+      if (!q || (o.askWorker && !this.worker) || (o.askReason && !this.reason)) return;
       const over = q > this.limit();
       if (over && o.mode !== 'out') return;
       if (over && !this.confirming) { this.confirming = true; this.draw(); return; }
       this.close();
-      o.onSave(q, this.worker, over);
+      o.onSave(q, this.worker, over, this.reason);
     },
 
     /* physical keys and the scanner while the sheet is open */
@@ -1964,11 +2114,16 @@ const Scanner = (() => {
     });
   }
 
-  /* ---------- من طيران: refill الرئيسي ---------- */
+  /* ---------- من طيران: refill الرئيسي (+ «إضافة للرئيسي» in admin mode) ---------- */
   const transfer = {
+    get s() { return state.transfer; },
+
     render() {
+      if (!Core.isAdmin()) this.s.mode = 'tayaran';
+      if (this.s.mode === 'add') return this.renderAdd();
       const need = Core.needsTransfer(), buy = Core.needsPurchase();
       $('#view').innerHTML = `
+        ${this.modeSwitch()}
         <div class="hero"><div class="big">${need.length}<small> مادة قليلة بالرئيسي وموجودة بطيران</small></div>
           <p>الأخضر هو الكمية المقترحة. اضغط، تأكد من العدد، واختار منو جابها. وتكدر تمسح أي مادة حتى تنقلها.</p></div>
         ${need.map(i => `<button class="card" data-action="move" data-sku="${i.sku}">${photo(i, { zoom: false })}
@@ -1996,8 +2151,60 @@ const Scanner = (() => {
       });
     },
 
-    actions: { move(d) { transfer.open(Core.item(d.sku)); } },
-    onScan(item) { if (Core.tayaranCap(item) <= 0) UI.toast('ماكو منها بطيران', 'warn'); else this.open(item); },
+    modeSwitch() {
+      return Core.isAdmin() ? `<div class="seg"><button class="${this.s.mode === 'tayaran' ? 'on' : ''}" data-action="tmode" data-mode="tayaran">من طيران</button>
+        <button class="add ${this.s.mode === 'add' ? 'on' : ''}" data-action="tmode" data-mode="add">➕ إضافة للرئيسي</button></div>` : '';
+    },
+
+    /** Admin: add to الرئيسي (new goods or a count fix). */
+    renderAdd() {
+      const s = this.s, today = Core.startOfToday();
+      const adds = Core.allMoves().filter(m => m.type === 'add' && m.at >= today);
+      $('#view').innerHTML = `
+        ${this.modeSwitch()}
+        <div class="hero add"><div class="big">➕<small> إضافة للرئيسي · ${esc(CONFIG.admin.name)}</small></div>
+          <p>امسح المادة أو اكتب اسمها، اكتب العدد واختار السبب: <b>وارد / شراء</b> أو <b>تصحيح جرد</b>. تطلع بدفترة «إذن إضافة».</p></div>
+        ${searchBox({ id: 'aq', value: s.query, placeholder: 'امسح، أو اكتب الاسم أو SKU' })}
+        <div class="section-head"><b>إضافات اليوم</b><span>${adds.filter(m => !m.undone).reduce((a, m) => a + m.qty, 0)} قطعة</span></div>
+        ${adds.map(m => moveRow(m)).join('') || '<div class="empty">ماكو إضافات اليوم.</div>'}`;
+      $('#bottom').innerHTML = '';
+      const input = $('#aq');
+      input.oninput = () => { s.query = input.value; drawResults('aq', s.query, 0); };
+      input.onkeydown = e => {
+        if (e.key === 'Enter' || (e.key === 'Tab' && s.query.trim())) {
+          e.preventDefault(); e.stopPropagation();
+          const hit = Core.findByBarcode(s.query) || Core.search(s.query)[0];
+          if (hit) this.openAdd(hit); else if (s.query.trim()) UI.toast('ما لكيت مادة بهذا الاسم أو الرقم', 'bad');
+        }
+      };
+      drawResults('aq', s.query, 0);
+    },
+
+    openAdd(item) {
+      this.s.query = '';
+      const input = $('#aq'); if (input) input.value = '';
+      drawResults('aq', '', 0);
+      Qty.open({
+        item, mode: 'add', askReason: true, quick: [10, 50, 100, 500],
+        label: q => `إضافة ${q} للرئيسي`,
+        onSave: (q, _w, _o, reason) => {
+          const res = Core.addStock({ sku: item.sku, qty: q, reason, source: SOURCE });
+          if (!res.ok) return UI.toast(res.error, 'bad');
+          UI.toast(`✓ انضاف ${q} × ${item.name} للرئيسي (${CONFIG.admin.reasons[reason]})`);
+          this.render();
+        },
+      });
+    },
+
+    actions: {
+      move(d) { transfer.open(Core.item(d.sku)); },
+      tmode(d) { transfer.s.mode = d.mode; transfer.s.query = ''; transfer.render(); },
+      pick(d) { const i = Core.item(d.sku); if (transfer.s.mode === 'add') transfer.openAdd(i); else transfer.open(i); },
+    },
+    onScan(item) {
+      if (this.s.mode === 'add' && Core.isAdmin()) return this.openAdd(item);
+      if (Core.tayaranCap(item) <= 0) UI.toast('ماكو منها بطيران', 'warn'); else this.open(item);
+    },
   };
 
   /* ---------- السجل: today's moves ---------- */
@@ -2012,7 +2219,7 @@ const Scanner = (() => {
         ${RO()
           ? `<div class="chips">${[[1, 'اليوم'], [7, '7 أيام'], [30, '30 يوم']].map(([d, t]) => `<button class="${d === days ? 'on' : ''}" data-action="days" data-days="${d}">${t}</button>`).join('')}</div>`
           : `<div class="chips">${['الكل', ...WORKERS].map(w => `<button class="${w === who ? 'on' : ''}" data-action="worker" data-worker="${esc(w)}">${esc(w)}</button>`).join('')}</div>`}
-        <div class="section-head"><span>${RO() ? 'حركاتك · ' : ''}${days === 1 ? 'اليوم' : 'آخر ' + days + ' يوم'}</span><span>سحب ${sum('out')} · رجع ${sum('return')} · نقل ${sum('in')}</span></div>
+        <div class="section-head"><span>${RO() ? 'حركاتك · ' : ''}${days === 1 ? 'اليوم' : 'آخر ' + days + ' يوم'}</span><span>سحب ${sum('out')} · رجع ${sum('return')} · نقل ${sum('in')}${sum('add') ? ' · إضافة ' + sum('add') : ''}</span></div>
         ${list.map(m => moveRow(m, { withDaftra: true, withReturn: true })).join('') || `<div class="empty">${RO() ? 'ماكو حركات.' : 'ماكو حركات اليوم.'}</div>`}`;
       $('#bottom').innerHTML = '';
     },
@@ -2079,7 +2286,9 @@ const Scanner = (() => {
     $('#qtySheet').addEventListener('click', e => {
       const k = e.target.closest('[data-key]');
       const w = e.target.closest('[data-action="sheetWorker"]');
+      const r = e.target.closest('[data-action="sheetReason"]');
       if (w) { Qty.worker = w.dataset.worker; Qty.draw(); }
+      else if (r) { Qty.reason = r.dataset.reason; Qty.draw(); }
       else if (k) Qty.press(k.dataset.key, k.dataset.value);
     });
     $('#qtyOverlay').addEventListener('click', e => { if (e.target.id === 'qtyOverlay') Qty.close(); });
