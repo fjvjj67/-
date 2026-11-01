@@ -203,6 +203,8 @@ body.readonly #main .panel-head .end > span { display: none; }
 .admin-count { width: 90px; font-weight: 800; border-color: #f0a6dc; }
 .admin-count.low { color: var(--bad); }
 .panel-note.admin-note { color: #f0a6dc; }
+.admin-btn { color: #f0a6dc; border-color: #f0a6dc; font-weight: 800; }
+.admin-btn.on { background: #3a1630; }
 
 /* ---- sync: status pill + one-time device code (both apps) ---- */
 .sync { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line);
@@ -438,6 +440,8 @@ body.readonly #main .panel-head .end > span { display: none; }
 .admin-count { width: 90px; font-weight: 800; border-color: #9b2a7a; }
 .admin-count.low { color: var(--bad); }
 .panel-note.admin-note { color: #9b2a7a; }
+.admin-btn { color: #9b2a7a; border-color: #9b2a7a; font-weight: 800; }
+.admin-btn.on { background: #fbe3f3; }
 
 /* ---- sync: status pill + one-time device code (both apps) ---- */
 .sync { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line);
@@ -588,7 +592,7 @@ const CONFIG = Object.freeze({
   /* إضافة للرئيسي: admin only (needs the admin PIN). Recorded under this name, with one reason. */
   admin: {
     name: 'الإدارة',
-    idleMs: 10 * 60 * 1000,     // admin mode closes by itself after 10 minutes without an add
+    idleMs: 30 * 60 * 1000,     // admin mode closes by itself after 30 minutes without an add / count change
     reasons: { purchase: 'وارد / شراء', count: 'تصحيح جرد' },
   },
 
@@ -1444,7 +1448,7 @@ const Sync = (() => {
       box = document.createElement('div');
       box.id = 'adminCode';
       box.className = 'sync-code';
-      box.innerHTML = `<form><b>🔑 دخول الإدارة</b><p>للإضافة على عدد الرئيسي (وارد أو تصحيح جرد). يطلع لحاله بعد 10 دقايق بدون إضافة.</p>
+      box.innerHTML = `<form><b>🔑 دخول الإدارة</b><p>للإضافة على عدد الرئيسي (وارد أو تصحيح جرد). يطلع لحاله بعد 30 دقيقة بدون إضافة أو تعديل.</p>
         <input name="pin" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="رمز الإدارة" dir="ltr">
         <small class="err"></small><button type="submit">دخول</button><button type="button" class="cancel" data-admin="cancel">إلغاء</button></form>`;
       document.body.appendChild(box);
@@ -1481,7 +1485,7 @@ const Sync = (() => {
     } finally { btn.disabled = false; }
   }
 
-  /** Every add keeps admin mode open another 10 minutes (and never past the token). */
+  /** Every add / count change keeps admin mode open another 30 minutes (never past the token). */
   function adminTouch() {
     if (!admin) return;
     clearTimeout(adminTimer);
@@ -1515,7 +1519,7 @@ const Sync = (() => {
     outbox = store.get(KEY.outbox, []);
     server = store.get(KEY.server, null) || { items: {}, moves: {}, vouchers: [], now: 0 };
 
-    Core.onAction(op => { if (op.op === 'add') adminTouch(); outbox.push(op); saveOutbox(); setState(state); kick(); });
+    Core.onAction(op => { if (op.op === 'add' || op.op === 'adjust') adminTouch(); outbox.push(op); saveOutbox(); setState(state); kick(); });
 
     const pill = document.getElementById('syncPill');
     if (pill) pill.addEventListener('click', onPillClick);
@@ -2297,7 +2301,10 @@ const Printout = (() => {
           <select class="field" data-change="section">${['الكل', ...Core.visibleSections().map(x => x.name)].map(n => `<option ${n === s.section ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
           <input class="field" id="tableSearch" style="width:240px" placeholder="⌕ اسم، SKU، باركود أو مكان" value="${esc(s.query)}">
           ${[['all', 'الكل'], ['low', 'تحت الحد'], ['buy', 'ماكو بطيران']].map(([k, t]) => `<button class="chip ${s.filter === k ? 'on' : ''}" data-action="filter" data-filter="${k}">${t} <small>${counts[k]}</small></button>`).join('')}
-          <div class="end"><span style="color:var(--muted);font-size:12.5px">الحركات باسم:</span>${workerPicker(s.worker, 'worker', true)}</div>
+          <div class="end">${RO() ? '' : Core.isAdmin()
+              ? '<button class="btn admin-btn on" data-action="adminOff">🔒 خروج من تعديل الأعداد</button>'
+              : '<button class="btn admin-btn" data-action="adminOn">🔑 تعديل الأعداد</button>'}
+            <span style="color:var(--muted);font-size:12.5px">الحركات باسم:</span>${workerPicker(s.worker, 'worker', true)}</div>
         </div>
         <div class="scroll"><table>
           <thead><tr><th>المادة</th><th>المكان ✎</th><th>الرئيسي${Core.isAdmin() ? ' ✎' : ''}</th><th>الحد ✎</th><th>طيران${Core.isAdmin() ? ' ✎' : ''}</th><th>طلع بالأسبوع</th><th>الحالة</th><th>حركة سريعة</th></tr></thead>
@@ -2329,6 +2336,8 @@ const Printout = (() => {
 
     actions: {
       filter: d => { table.s.filter = d.filter; table.s.show = 40; render(); },
+      adminOn: () => Sync.showAdminBox(),
+      adminOff: () => { Sync.adminOff(); UI.toast('🔒 طلعت من تعديل الأعداد'); },
       worker: d => { table.s.worker = d.worker; render(); },
       more: () => { table.s.show += 40; render(); },
       withdraw: d => {
