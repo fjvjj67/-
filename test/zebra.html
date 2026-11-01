@@ -1445,7 +1445,7 @@ const Sync = (() => {
       box.id = 'adminCode';
       box.className = 'sync-code';
       box.innerHTML = `<form><b>🔑 دخول الإدارة</b><p>للإضافة على عدد الرئيسي (وارد أو تصحيح جرد). يطلع لحاله بعد 10 دقايق بدون إضافة.</p>
-        <input name="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="رمز الإدارة" dir="ltr">
+        <input name="pin" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="رمز الإدارة" dir="ltr">
         <small class="err"></small><button type="submit">دخول</button><button type="button" class="cancel" data-admin="cancel">إلغاء</button></form>`;
       document.body.appendChild(box);
       box.querySelector('form').addEventListener('submit', e => {
