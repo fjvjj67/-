@@ -155,7 +155,7 @@ header { padding: 12px 14px 8px; display: flex; align-items: center; gap: 8px; }
 .stock { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
 .stock div { background: #0003; border-radius: 12px; padding: 5px 10px; display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: var(--muted); }
 .stock b { font-size: 18px; color: var(--text); }
-.stock b.low { color: var(--bad); }
+.stock b.low, .stock b.neg { color: var(--bad); }   /* neg: طيران below zero (not counted yet) */
 .mode { margin-top: 8px; text-align: center; font-weight: 800; font-size: 13px; border-radius: 10px; padding: 5px; }
 .mode.out { background: #471c1a; color: #ffc9c4; }
 .mode.in { background: #173a2b; color: #bff0d8; }
@@ -384,7 +384,7 @@ header { padding: 12px 14px 8px; display: flex; align-items: center; gap: 8px; }
 .stock { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
 .stock div { background: #0003; border-radius: 12px; padding: 5px 10px; display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: var(--muted); }
 .stock b { font-size: 18px; color: var(--text); }
-.stock b.low { color: var(--bad); }
+.stock b.low, .stock b.neg { color: var(--bad); }   /* neg: طيران below zero (not counted yet) */
 .mode { margin-top: 8px; text-align: center; font-weight: 800; font-size: 13px; border-radius: 10px; padding: 5px; }
 .mode.out { background: #fde4e2; color: #b3261e; }
 .mode.in { background: #dff5ea; color: #136b45; }
@@ -667,6 +667,7 @@ const Core = (() => {
   let replaying = false;                  // true while sync.js re-applies unsent ops
   let readOnly = false;                   // view-only device code: no changes at all
   let sectionScope = null;                // view-only code limited to some sections (null = all)
+  let negTayaran = false;                 // طيران may go below zero (until it is counted) — set by the server
   const listeners = [], actionListeners = [];
 
   /* ---------- setup ---------------------------------------------------- */
@@ -701,7 +702,7 @@ const Core = (() => {
       items.push({
         sku, barcode, name: String(raw.name).trim(), location: String(raw.location ?? '').trim().toUpperCase(),
         section: String(raw.section ?? '').trim(), group: String(raw.group ?? '').trim(), photo,
-        main: wholeOrZero(raw.main), tayaran: Math.max(0, wholeOrZero(raw.tayaran)), min: Math.max(0, wholeOrZero(raw.min)),
+        main: wholeOrZero(raw.main), tayaran: negTayaran ? wholeOrZero(raw.tayaran) : Math.max(0, wholeOrZero(raw.tayaran)), min: Math.max(0, wholeOrZero(raw.min)),
       });
     }
     bySku = Object.fromEntries(items.map(i => [i.sku, i]));
@@ -737,6 +738,11 @@ const Core = (() => {
 
   /** View-only (set by sync.js from the server's answer). Every change is refused. */
   function setReadOnly(flag) { readOnly = !!flag; }
+  /** طيران not counted yet: transfers may take it below zero (the server's setting decides). */
+  function setNegativeTayaran(flag) { negTayaran = !!flag; }
+  const negativeTayaran = () => negTayaran;
+  /** Most that can come from طيران right now. */
+  const tayaranCap = i => (negTayaran ? Infinity : i.tayaran);
   /** Sections this device may see (the server already sends only their items). */
   function setSectionScope(names) { sectionScope = Array.isArray(names) ? names : null; }
   const visibleSections = () => (sectionScope ? CONFIG.sections.filter(s => sectionScope.includes(s.name)) : CONFIG.sections);
@@ -785,14 +791,14 @@ const Core = (() => {
   }
   const isLow = i => i.main < i.min;
   /** Low in الرئيسي and طيران has some → transfer. */
-  const needsTransfer = () => items.filter(i => isLow(i) && i.tayaran > 0).sort((a, b) => a.main / a.min - b.main / b.min);
+  const needsTransfer = () => items.filter(i => isLow(i) && (negTayaran || i.tayaran > 0)).sort((a, b) => a.main / a.min - b.main / b.min);
   /** Low in الرئيسي and nothing in طيران → purchase. */
-  const needsPurchase = () => items.filter(i => isLow(i) && i.tayaran <= 0);
+  const needsPurchase = () => items.filter(i => isLow(i) && !negTayaran && i.tayaran <= 0);
   /** Quantity that brings الرئيسي back to min × refillToMinTimes, never more than طيران has. */
   function suggestedTransfer(i) {
     const step = CONFIG.rules.suggestStep;
     const want = Math.round((i.min * CONFIG.rules.refillToMinTimes - i.main) / step) * step;
-    return Math.min(i.tayaran, Math.max(step, want));
+    return Math.min(tayaranCap(i), Math.max(step, want));
   }
 
   /* ---------- changing stock ------------------------------------------ */
@@ -843,7 +849,7 @@ const Core = (() => {
     if (!i) return fail('مادة مو معروفة');
     if (!CONFIG.workers.includes(who)) return fail('اختار منو جابها');
     if (!isWhole(qty)) return fail('العدد لازم رقم صحيح أكبر من صفر');
-    if (qty > i.tayaran) return fail(`بطيران ${i.tayaran} بس`);
+    if (qty > tayaranCap(i)) return fail(`بطيران ${i.tayaran} بس`);
     i.tayaran -= qty;
     i.main += qty;
     const m = record({ type: 'in', sku, qty, who, source }, fixed);
@@ -1014,7 +1020,7 @@ const Core = (() => {
 
   return {
     DAY, load, importHistory, onChange, onAction, refresh: changed, replay, setDevice, slipCounter, startOfToday,
-    setReadOnly, isReadOnly, setSectionScope, visibleSections,
+    setReadOnly, isReadOnly, setSectionScope, visibleSections, setNegativeTayaran, negativeTayaran, tayaranCap,
     item, allItems, photo, allMoves, moveById, peekSlip,
     returnedQty, remaining, openWithdrawals,
     weeklyOut, daysOfCover, isLow, needsTransfer, needsPurchase, suggestedTransfer,
@@ -1113,6 +1119,7 @@ const Sync = (() => {
     if (reply.role && (reply.role !== server.role || (reply.viewer || '') !== (server.viewer || ''))) {
       server.role = reply.role; server.viewer = reply.viewer || ''; diff = true;
     }
+    if ('negTayaran' in reply && !!reply.negTayaran !== !!server.negTayaran) { server.negTayaran = !!reply.negTayaran; diff = true; }
     if ('sections' in reply && JSON.stringify(reply.sections || null) !== JSON.stringify(server.sections || null)) {
       server.sections = reply.sections || null; diff = true;        // view-only code limited to these sections
     }
@@ -1146,6 +1153,7 @@ const Sync = (() => {
   /** Server copy + queued changes → core.js, then redraw. */
   function rebuild() {
     const items = Object.values(server.items);
+    Core.setNegativeTayaran(!!server.negTayaran);    // before load: negative طيران balances stay as they are
     Core.load({ items: items.length ? items : embedded.items, photos: embedded.photos });
     Core.importHistory(Object.values(server.moves), { vouchers: server.vouchers });
     const waiting = new Set();
@@ -1677,7 +1685,7 @@ const Scanner = (() => {
     value() { return +this.buffer || this.opts.defaultQty || 0; },
     limit() {
       const { item, mode, max } = this.opts;
-      return mode === 'in' ? item.tayaran : mode === 'return' ? max : item.main;
+      return mode === 'in' ? Core.tayaranCap(item) : mode === 'return' ? max : item.main;
     },
 
     open(opts) {
@@ -1714,7 +1722,7 @@ const Scanner = (() => {
 
       $('#qtySheet').innerHTML = `
         <div class="sheet-head">${photo(i)}<div><div class="name">${esc(i.name)}</div><small>${i.sku} · ${esc(i.location || '—')}</small></div></div>
-        <div class="stock"><div>${CONFIG.stores.main} <b class="${Core.isLow(i) ? 'low' : ''}">${i.main}</b></div><div>${CONFIG.stores.tayaran} <b>${i.tayaran}</b></div></div>
+        <div class="stock"><div>${CONFIG.stores.main} <b class="${Core.isLow(i) ? 'low' : ''}">${i.main}</b></div><div>${CONFIG.stores.tayaran} <b class="${i.tayaran < 0 ? 'neg' : ''}">${i.tayaran}</b></div></div>
         <div class="mode ${o.mode}">${modeText}</div>
         <div class="display ${this.buffer ? '' : 'empty'}">${display}</div>
         ${o.defaultQty && !this.buffer ? `<div class="hint">إذا ${o.defaultQty} احفظ مباشرة. إذا أكثر، اكتب العدد.</div>` : ''}
@@ -1989,7 +1997,7 @@ const Scanner = (() => {
     },
 
     actions: { move(d) { transfer.open(Core.item(d.sku)); } },
-    onScan(item) { if (item.tayaran <= 0) UI.toast('ماكو منها بطيران', 'warn'); else this.open(item); },
+    onScan(item) { if (Core.tayaranCap(item) <= 0) UI.toast('ماكو منها بطيران', 'warn'); else this.open(item); },
   };
 
   /* ---------- السجل: today's moves ---------- */

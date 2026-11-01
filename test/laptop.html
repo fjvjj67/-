@@ -644,6 +644,7 @@ const Core = (() => {
   let replaying = false;                  // true while sync.js re-applies unsent ops
   let readOnly = false;                   // view-only device code: no changes at all
   let sectionScope = null;                // view-only code limited to some sections (null = all)
+  let negTayaran = false;                 // طيران may go below zero (until it is counted) — set by the server
   const listeners = [], actionListeners = [];
 
   /* ---------- setup ---------------------------------------------------- */
@@ -678,7 +679,7 @@ const Core = (() => {
       items.push({
         sku, barcode, name: String(raw.name).trim(), location: String(raw.location ?? '').trim().toUpperCase(),
         section: String(raw.section ?? '').trim(), group: String(raw.group ?? '').trim(), photo,
-        main: wholeOrZero(raw.main), tayaran: Math.max(0, wholeOrZero(raw.tayaran)), min: Math.max(0, wholeOrZero(raw.min)),
+        main: wholeOrZero(raw.main), tayaran: negTayaran ? wholeOrZero(raw.tayaran) : Math.max(0, wholeOrZero(raw.tayaran)), min: Math.max(0, wholeOrZero(raw.min)),
       });
     }
     bySku = Object.fromEntries(items.map(i => [i.sku, i]));
@@ -714,6 +715,11 @@ const Core = (() => {
 
   /** View-only (set by sync.js from the server's answer). Every change is refused. */
   function setReadOnly(flag) { readOnly = !!flag; }
+  /** طيران not counted yet: transfers may take it below zero (the server's setting decides). */
+  function setNegativeTayaran(flag) { negTayaran = !!flag; }
+  const negativeTayaran = () => negTayaran;
+  /** Most that can come from طيران right now. */
+  const tayaranCap = i => (negTayaran ? Infinity : i.tayaran);
   /** Sections this device may see (the server already sends only their items). */
   function setSectionScope(names) { sectionScope = Array.isArray(names) ? names : null; }
   const visibleSections = () => (sectionScope ? CONFIG.sections.filter(s => sectionScope.includes(s.name)) : CONFIG.sections);
@@ -762,14 +768,14 @@ const Core = (() => {
   }
   const isLow = i => i.main < i.min;
   /** Low in الرئيسي and طيران has some → transfer. */
-  const needsTransfer = () => items.filter(i => isLow(i) && i.tayaran > 0).sort((a, b) => a.main / a.min - b.main / b.min);
+  const needsTransfer = () => items.filter(i => isLow(i) && (negTayaran || i.tayaran > 0)).sort((a, b) => a.main / a.min - b.main / b.min);
   /** Low in الرئيسي and nothing in طيران → purchase. */
-  const needsPurchase = () => items.filter(i => isLow(i) && i.tayaran <= 0);
+  const needsPurchase = () => items.filter(i => isLow(i) && !negTayaran && i.tayaran <= 0);
   /** Quantity that brings الرئيسي back to min × refillToMinTimes, never more than طيران has. */
   function suggestedTransfer(i) {
     const step = CONFIG.rules.suggestStep;
     const want = Math.round((i.min * CONFIG.rules.refillToMinTimes - i.main) / step) * step;
-    return Math.min(i.tayaran, Math.max(step, want));
+    return Math.min(tayaranCap(i), Math.max(step, want));
   }
 
   /* ---------- changing stock ------------------------------------------ */
@@ -820,7 +826,7 @@ const Core = (() => {
     if (!i) return fail('مادة مو معروفة');
     if (!CONFIG.workers.includes(who)) return fail('اختار منو جابها');
     if (!isWhole(qty)) return fail('العدد لازم رقم صحيح أكبر من صفر');
-    if (qty > i.tayaran) return fail(`بطيران ${i.tayaran} بس`);
+    if (qty > tayaranCap(i)) return fail(`بطيران ${i.tayaran} بس`);
     i.tayaran -= qty;
     i.main += qty;
     const m = record({ type: 'in', sku, qty, who, source }, fixed);
@@ -991,7 +997,7 @@ const Core = (() => {
 
   return {
     DAY, load, importHistory, onChange, onAction, refresh: changed, replay, setDevice, slipCounter, startOfToday,
-    setReadOnly, isReadOnly, setSectionScope, visibleSections,
+    setReadOnly, isReadOnly, setSectionScope, visibleSections, setNegativeTayaran, negativeTayaran, tayaranCap,
     item, allItems, photo, allMoves, moveById, peekSlip,
     returnedQty, remaining, openWithdrawals,
     weeklyOut, daysOfCover, isLow, needsTransfer, needsPurchase, suggestedTransfer,
@@ -1090,6 +1096,7 @@ const Sync = (() => {
     if (reply.role && (reply.role !== server.role || (reply.viewer || '') !== (server.viewer || ''))) {
       server.role = reply.role; server.viewer = reply.viewer || ''; diff = true;
     }
+    if ('negTayaran' in reply && !!reply.negTayaran !== !!server.negTayaran) { server.negTayaran = !!reply.negTayaran; diff = true; }
     if ('sections' in reply && JSON.stringify(reply.sections || null) !== JSON.stringify(server.sections || null)) {
       server.sections = reply.sections || null; diff = true;        // view-only code limited to these sections
     }
@@ -1123,6 +1130,7 @@ const Sync = (() => {
   /** Server copy + queued changes → core.js, then redraw. */
   function rebuild() {
     const items = Object.values(server.items);
+    Core.setNegativeTayaran(!!server.negTayaran);    // before load: negative طيران balances stay as they are
     Core.load({ items: items.length ? items : embedded.items, photos: embedded.photos });
     Core.importHistory(Object.values(server.moves), { vouchers: server.vouchers });
     const waiting = new Set();
@@ -1958,7 +1966,7 @@ const Printout = (() => {
           <div class="products">${list.slice(0, 120).map(i => {
             const inCart = s.mode !== 'return' && s.cart.find(l => l.sku === i.sku);
             return `<button class="product" data-action="add" data-sku="${i.sku}">${photo(i, { zoom: false })}${inCart ? `<span class="in-cart">${inCart.qty}</span>` : ''}<b>${esc(i.name)}</b>
-              <span class="stock"><span>الرئيسي <b class="${Core.isLow(i) ? 'low' : ''}">${i.main}</b></span><span>طيران <b>${i.tayaran}</b></span></span><code style="margin:2px">${i.sku}</code></button>`;
+              <span class="stock"><span>الرئيسي <b class="${Core.isLow(i) ? 'low' : ''}">${i.main}</b></span><span>طيران <b class="${i.tayaran < 0 ? 'low' : ''}">${i.tayaran}</b></span></span><code style="margin:2px">${i.sku}</code></button>`;
           }).join('') || `<p class="empty" style="grid-column:1/-1">${emptyText}</p>`}</div>
         </div>
         <div class="slip">
@@ -2023,7 +2031,7 @@ const Printout = (() => {
         if (!res.ok) return UI.toast(res.error, 'bad');
         UI.toast(`✓ انحفظ ${res.slip} لـ${s.worker}`);
       } else {
-        const over = s.cart.filter(l => l.qty > Core.item(l.sku).tayaran);
+        const over = s.cart.filter(l => l.qty > Core.tayaranCap(Core.item(l.sku)));
         if (over.length) return UI.toast(`⚠ ${over.length} مادة أكثر من اللي بطيران. صلّح العدد`, 'bad');
         s.cart.forEach(l => Core.transfer({ who: s.worker, sku: l.sku, qty: l.qty, source: SOURCE }));
         UI.toast(`✓ انضاف للرئيسي ${s.cart.length} مادة من طيران`);
@@ -2103,10 +2111,10 @@ const Printout = (() => {
             <td><input class="field loc" data-change="location" data-sku="${i.sku}" value="${esc(i.location || '')}" placeholder="—" ${RO() ? 'readonly' : ''}></td>
             <td class="${Core.isLow(i) ? 'low' : ''}" style="font-size:15px;font-weight:800">${i.main}</td>
             <td><input class="field qty" type="number" min="0" data-change="min" data-sku="${i.sku}" value="${i.min}" ${RO() ? 'readonly' : ''}></td>
-            <td style="font-weight:700">${i.tayaran}</td><td>${Core.weeklyOut(i.sku)}</td><td>${statusTag(i)}</td>
+            <td style="font-weight:700${i.tayaran < 0 ? ';color:var(--bad)' : ''}">${i.tayaran}</td><td>${Core.weeklyOut(i.sku)}</td><td>${statusTag(i)}</td>
             <td><div class="row-actions"><input class="field qty" type="number" min="1" id="quick-${i.sku}" data-enter="withdraw" data-sku="${i.sku}" placeholder="${Core.isLow(i) && i.tayaran > 0 ? Core.suggestedTransfer(i) : 'كم'}">
               <button class="btn small red" data-action="withdraw" data-sku="${i.sku}">سحب</button>
-              <button class="btn small green" data-action="transfer" data-sku="${i.sku}" ${i.tayaran > 0 ? '' : 'disabled'}>من طيران</button></div></td></tr>`).join('')}</tbody>
+              <button class="btn small green" data-action="transfer" data-sku="${i.sku}" ${Core.tayaranCap(i) > 0 ? '' : 'disabled'}>من طيران</button></div></td></tr>`).join('')}</tbody>
         </table>${rows.length > s.show ? `<div class="more"><button class="btn" data-action="more">عرض ${Math.min(40, rows.length - s.show)} بعد (من ${rows.length})</button></div>` : ''}</div>
         <div class="panel-note">✎ المكان والحد الأدنى تعدلهم مباشرة، وكل تعديل ينحفظ بالسجل. اكتب العدد واضغط «سحب» أو «من طيران». إذا تركت العدد فارغ بـ«من طيران»، ياخذ الرقم المقترح.</div>
       </div>`;
@@ -2135,7 +2143,7 @@ const Printout = (() => {
       },
       transfer: d => {
         const s = table.s, i = Core.item(d.sku);
-        const q = Math.min(i.tayaran, table.quickQty(d.sku) || Core.suggestedTransfer(i));
+        const q = Math.min(Core.tayaranCap(i), table.quickQty(d.sku) || Core.suggestedTransfer(i));
         const res = Core.transfer({ who: s.worker, sku: d.sku, qty: q, source: SOURCE });
         if (!res.ok) return UI.toast(res.error, 'bad');
         s.flash = d.sku;
@@ -2160,7 +2168,7 @@ const Printout = (() => {
 
     html() {
       const s = this.s, need = this.list(), buy = Core.needsPurchase(), chosen = this.selected();
-      const total = chosen.reduce((a, i) => a + Math.min(this.qtyFor(i), i.tayaran), 0);
+      const total = chosen.reduce((a, i) => a + Math.min(this.qtyFor(i), Core.tayaranCap(i)), 0);
       const todayIn = Core.allMoves({ includeUndone: false }).filter(m => m.type === 'in' && m.at >= Core.startOfToday());
       return `<div class="view">
         <div class="page-head">
@@ -2182,7 +2190,7 @@ const Printout = (() => {
               <td><b class="low" style="font-size:17px">${i.main}</b> <small style="color:var(--muted)">/ ${i.min}</small><div class="bar"><i style="width:${Math.min(100, i.main / i.min * 100)}%"></i></div></td>
               <td><b style="font-size:16px">${i.tayaran}</b></td>
               <td style="color:var(--muted)">${UI.cover(Core.daysOfCover(i))}</td>
-              <td><input class="field qty" type="number" min="1" max="${i.tayaran}" id="tq-${i.sku}" data-change="qty" data-sku="${i.sku}" value="${this.qtyFor(i)}" style="width:90px;color:var(--ok)"></td>
+              <td><input class="field qty" type="number" min="1" ${Core.negativeTayaran() ? '' : `max="${i.tayaran}"`} id="tq-${i.sku}" data-change="qty" data-sku="${i.sku}" value="${this.qtyFor(i)}" style="width:90px;color:var(--ok)"></td>
               <td><button class="btn small green" data-action="moveOne" data-sku="${i.sku}" ${s.worker ? '' : 'disabled'}>نقل</button></td></tr>`).join('')}</tbody></table></div>`
             : Core.allItems().length ? '<div class="all-good">✓ كلشي زين بالرئيسي، ماكو شي يحتاج نقل</div>' : '<div class="empty">ماكو مواد بعد.</div>'}
         </div>
@@ -2195,14 +2203,14 @@ const Printout = (() => {
     syncQuantities() {
       $$('#main [data-change="qty"]').forEach(x => {
         const i = Core.item(x.dataset.sku);
-        this.s.qty[i.sku] = Math.max(1, Math.min(i.tayaran, int(x.value) || 1));
+        this.s.qty[i.sku] = Math.max(1, Math.min(Core.tayaranCap(i), int(x.value) || 1));
       });
     },
 
     move(items) {
       let count = 0;
       items.forEach(i => {
-        const res = Core.transfer({ who: this.s.worker, sku: i.sku, qty: Math.min(i.tayaran, this.qtyFor(i)), source: SOURCE });
+        const res = Core.transfer({ who: this.s.worker, sku: i.sku, qty: Math.min(Core.tayaranCap(i), this.qtyFor(i)), source: SOURCE });
         if (res.ok) { count++; delete this.s.qty[i.sku]; }
       });
       return count;
@@ -2220,7 +2228,7 @@ const Printout = (() => {
       /* printable list with photos: the print window offers «Save as PDF» or paper */
       printList: () => {
         transfer.syncQuantities();
-        const rows = transfer.selected().map(i => ({ item: i, qty: Math.min(transfer.qtyFor(i), i.tayaran) }));
+        const rows = transfer.selected().map(i => ({ item: i, qty: Math.min(transfer.qtyFor(i), Core.tayaranCap(i)) }));
         if (!rows.length) return UI.toast('ماكو مواد محددة', 'bad');
         Printout.transferList(rows, { worker: transfer.s.worker });
         UI.toast('اختار «حفظ كـ PDF» أو اطبعها مباشرة');
@@ -2228,7 +2236,7 @@ const Printout = (() => {
       purchaseList: () => UI.downloadCsv('قائمة_شراء', [['SKU', 'المادة', 'الرئيسي', 'الحد', 'طلع بالأسبوع'], ...Core.needsPurchase().map(i => [i.sku, i.name, i.main, i.min, Core.weeklyOut(i.sku)])]),
     },
     changes: {
-      qty: (d, el) => { const i = Core.item(d.sku); transfer.s.qty[d.sku] = Math.max(1, Math.min(i.tayaran, int(el.value) || 1)); el.value = transfer.s.qty[d.sku]; },
+      qty: (d, el) => { const i = Core.item(d.sku); transfer.s.qty[d.sku] = Math.max(1, Math.min(Core.tayaranCap(i), int(el.value) || 1)); el.value = transfer.s.qty[d.sku]; },
       pick: (d, el) => { el.checked ? transfer.s.excluded.delete(d.sku) : transfer.s.excluded.add(d.sku); transfer.syncQuantities(); render(); },
       all: (d, el) => { transfer.s.excluded = new Set(el.checked ? [] : transfer.list().map(i => i.sku)); transfer.syncQuantities(); render(); },
     },
