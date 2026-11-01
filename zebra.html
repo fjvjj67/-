@@ -103,7 +103,7 @@ header { padding: 12px 14px 8px; display: flex; align-items: center; gap: 8px; }
 
 /* ---- photo grid ---- */
 .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px; text-align: right; display: flex; flex-direction: column; overflow: hidden; }
+.tile { content-visibility: auto; contain-intrinsic-size: 110px 170px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px; text-align: right; display: flex; flex-direction: column; overflow: hidden; }
 .tile .th, .tile .noph { width: 100%; aspect-ratio: 1; border-radius: 9px; font-size: 22px; }
 @supports not (aspect-ratio: 1) { .tile .th, .tile .noph { height: calc((100vw - 64px) / 3); } }   /* Chrome < 88 (the Zebra has 86) */
 .tile b { font-size: 11.5px; line-height: 1.3; margin: 4px 2px 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.6em; }
@@ -349,7 +349,7 @@ header { padding: 12px 14px 8px; display: flex; align-items: center; gap: 8px; }
 
 /* ---- photo grid ---- */
 .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px; text-align: right; display: flex; flex-direction: column; overflow: hidden; }
+.tile { content-visibility: auto; contain-intrinsic-size: 110px 170px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px; text-align: right; display: flex; flex-direction: column; overflow: hidden; }
 .tile .th, .tile .noph { width: 100%; aspect-ratio: 1; border-radius: 9px; font-size: 22px; }
 @supports not (aspect-ratio: 1) { .tile .th, .tile .noph { height: calc((100vw - 64px) / 3); } }   /* Chrome < 88 (the Zebra has 86) */
 .tile b { font-size: 11.5px; line-height: 1.3; margin: 4px 2px 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.6em; }
@@ -706,6 +706,8 @@ const Core = (() => {
   /** @type {Item[]} */ let items = [];
   /** @type {Object<string,Item>} */ let bySku = {};
   /** @type {string[]} */ let photos = [];
+  let photosSource = null;                // the list photos[] was checked from (re-check only when it changes)
+  const photoUrls = new Map();            // photo index → short blob: URL (made once, so pages stay light)
   /** @type {Move[]} newest first */ let moves = [];
   /** @type {{voucher:string,at:number,kind:string,count:number,qty:number}[]} newest first */ let vouchers = [];
   let nextSlip = 1;
@@ -735,7 +737,12 @@ const Core = (() => {
   function load({ items: list, photos: photoList }) {
     moves = []; vouchers = []; nextSlip = device.slipFloor;
     const skipped = [], seenSku = new Set(), seenBarcode = new Set();
-    photos = (photoList || []).map(p => (SAFE_PHOTO.test(p) ? p : null));
+    if (photoList !== photosSource) {       // sync.js reloads often with the same list: skip the heavy check
+      photosSource = photoList;
+      photos = (photoList || []).map(p => (SAFE_PHOTO.test(p) ? p : null));
+      photoUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch { /* ignore */ } });
+      photoUrls.clear();
+    }
     items = [];
     for (const raw of list || []) {
       const sku = String(raw.sku ?? '').trim(), barcode = String(raw.barcode ?? '').trim();
@@ -811,6 +818,22 @@ const Core = (() => {
   const item = sku => bySku[sku];
   const allItems = () => items;
   const photo = i => (i && i.photo != null ? photos[i.photo] : null);
+  /** Same photo as a short blob: URL, for screens (a data: URL makes every redraw megabytes long). */
+  function photoUrl(i) {
+    const src = photo(i);
+    if (!src) return null;
+    let url = photoUrls.get(i.photo);
+    if (!url) {
+      try {
+        const comma = src.indexOf(','), mime = src.slice(5, src.indexOf(';')), bin = atob(src.slice(comma + 1));
+        const bytes = new Uint8Array(bin.length);
+        for (let k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k);
+        url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+      } catch { url = src; }                // very old browser: fall back to the data: URL
+      photoUrls.set(i.photo, url);
+    }
+    return url;
+  }
   const allMoves = ({ includeUndone = true } = {}) => (includeUndone ? moves : moves.filter(m => !m.undone));
   const moveById = id => moves.find(m => m.id === id);
   const peekSlip = () => slipLabel(nextSlip);
@@ -1115,7 +1138,7 @@ const Core = (() => {
   return {
     DAY, load, importHistory, onChange, onAction, refresh: changed, replay, setDevice, slipCounter, startOfToday,
     setReadOnly, isReadOnly, setAdmin, isAdmin, setSectionScope, visibleSections, setNegativeTayaran, negativeTayaran, tayaranCap,
-    item, allItems, photo, allMoves, moveById, peekSlip,
+    item, allItems, photo, photoUrl, allMoves, moveById, peekSlip,
     returnedQty, remaining, openWithdrawals,
     weeklyOut, daysOfCover, isLow, needsTransfer, needsPurchase, suggestedTransfer,
     withdraw, transfer, addStock, setStock, adjustDelta, returnGoods, editItem, undo, canUndo, undoBlocker,
@@ -1630,7 +1653,7 @@ const UI = (() => {
 
   /** Item photo (or a grey placeholder). `zoom` lets a tap open it full size. */
   function photo(item, { zoom = true, cls = 'th' } = {}) {
-    const src = Core.photo(item);
+    const src = Core.photoUrl(item);
     if (!src) return `<span class="noph ${cls}">▦</span>`;
     return `<img class="${cls}" loading="lazy" alt="" src="${src}"${zoom ? ` data-zoom="${item.sku}"` : ''}>`;
   }
@@ -1658,7 +1681,7 @@ const UI = (() => {
       const z = e.target.closest('[data-zoom]');
       if (!z) return;
       e.stopPropagation(); e.preventDefault();
-      $('#lightbox img').src = Core.photo(Core.item(z.dataset.zoom));
+      $('#lightbox img').src = Core.photoUrl(Core.item(z.dataset.zoom));
       $('#lightbox').classList.add('on');
     }, true);
     $('#lightbox').addEventListener('click', () => $('#lightbox').classList.remove('on'));

@@ -126,7 +126,7 @@ tr.detail td { background: #171210; color: var(--muted); font-size: 12.5px; }
 /* ---- desk (tab 1) ---- */
 .desk { display: grid; grid-template-columns: 1fr 430px; gap: 16px; align-items: start; }
 .products { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 14px; max-height: calc(100vh - 250px); overflow: auto; }
-.product { background: var(--card-2); border: 1px solid var(--line); border-radius: 14px; padding: 6px; text-align: right; display: flex; flex-direction: column; transition: transform .15s, border-color .15s; position: relative; }
+.product { content-visibility: auto; contain-intrinsic-size: 150px 230px; background: var(--card-2); border: 1px solid var(--line); border-radius: 14px; padding: 6px; text-align: right; display: flex; flex-direction: column; transition: transform .15s, border-color .15s; position: relative; }
 .product:hover { transform: translateY(-2px); border-color: var(--brand); }
 .product .th, .product .noph { width: 100%; aspect-ratio: 1; border-radius: 10px; font-size: 26px; cursor: pointer; }
 @supports not (aspect-ratio: 1) { .product .th, .product .noph { height: 150px; } }   /* old browsers */
@@ -363,7 +363,7 @@ tr.detail td { background: #ffffff; color: var(--muted); font-size: 12.5px; }
 /* ---- desk (tab 1) ---- */
 .desk { display: grid; grid-template-columns: 1fr 430px; gap: 16px; align-items: start; }
 .products { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 14px; max-height: calc(100vh - 250px); overflow: auto; }
-.product { background: var(--card-2); border: 1px solid var(--line); border-radius: 14px; padding: 6px; text-align: right; display: flex; flex-direction: column; transition: transform .15s, border-color .15s; position: relative; }
+.product { content-visibility: auto; contain-intrinsic-size: 150px 230px; background: var(--card-2); border: 1px solid var(--line); border-radius: 14px; padding: 6px; text-align: right; display: flex; flex-direction: column; transition: transform .15s, border-color .15s; position: relative; }
 .product:hover { transform: translateY(-2px); border-color: var(--brand); }
 .product .th, .product .noph { width: 100%; aspect-ratio: 1; border-radius: 10px; font-size: 26px; cursor: pointer; }
 @supports not (aspect-ratio: 1) { .product .th, .product .noph { height: 150px; } }   /* old browsers */
@@ -681,6 +681,8 @@ const Core = (() => {
   /** @type {Item[]} */ let items = [];
   /** @type {Object<string,Item>} */ let bySku = {};
   /** @type {string[]} */ let photos = [];
+  let photosSource = null;                // the list photos[] was checked from (re-check only when it changes)
+  const photoUrls = new Map();            // photo index → short blob: URL (made once, so pages stay light)
   /** @type {Move[]} newest first */ let moves = [];
   /** @type {{voucher:string,at:number,kind:string,count:number,qty:number}[]} newest first */ let vouchers = [];
   let nextSlip = 1;
@@ -710,7 +712,12 @@ const Core = (() => {
   function load({ items: list, photos: photoList }) {
     moves = []; vouchers = []; nextSlip = device.slipFloor;
     const skipped = [], seenSku = new Set(), seenBarcode = new Set();
-    photos = (photoList || []).map(p => (SAFE_PHOTO.test(p) ? p : null));
+    if (photoList !== photosSource) {       // sync.js reloads often with the same list: skip the heavy check
+      photosSource = photoList;
+      photos = (photoList || []).map(p => (SAFE_PHOTO.test(p) ? p : null));
+      photoUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch { /* ignore */ } });
+      photoUrls.clear();
+    }
     items = [];
     for (const raw of list || []) {
       const sku = String(raw.sku ?? '').trim(), barcode = String(raw.barcode ?? '').trim();
@@ -786,6 +793,22 @@ const Core = (() => {
   const item = sku => bySku[sku];
   const allItems = () => items;
   const photo = i => (i && i.photo != null ? photos[i.photo] : null);
+  /** Same photo as a short blob: URL, for screens (a data: URL makes every redraw megabytes long). */
+  function photoUrl(i) {
+    const src = photo(i);
+    if (!src) return null;
+    let url = photoUrls.get(i.photo);
+    if (!url) {
+      try {
+        const comma = src.indexOf(','), mime = src.slice(5, src.indexOf(';')), bin = atob(src.slice(comma + 1));
+        const bytes = new Uint8Array(bin.length);
+        for (let k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k);
+        url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+      } catch { url = src; }                // very old browser: fall back to the data: URL
+      photoUrls.set(i.photo, url);
+    }
+    return url;
+  }
   const allMoves = ({ includeUndone = true } = {}) => (includeUndone ? moves : moves.filter(m => !m.undone));
   const moveById = id => moves.find(m => m.id === id);
   const peekSlip = () => slipLabel(nextSlip);
@@ -1090,7 +1113,7 @@ const Core = (() => {
   return {
     DAY, load, importHistory, onChange, onAction, refresh: changed, replay, setDevice, slipCounter, startOfToday,
     setReadOnly, isReadOnly, setAdmin, isAdmin, setSectionScope, visibleSections, setNegativeTayaran, negativeTayaran, tayaranCap,
-    item, allItems, photo, allMoves, moveById, peekSlip,
+    item, allItems, photo, photoUrl, allMoves, moveById, peekSlip,
     returnedQty, remaining, openWithdrawals,
     weeklyOut, daysOfCover, isLow, needsTransfer, needsPurchase, suggestedTransfer,
     withdraw, transfer, addStock, setStock, adjustDelta, returnGoods, editItem, undo, canUndo, undoBlocker,
@@ -1605,7 +1628,7 @@ const UI = (() => {
 
   /** Item photo (or a grey placeholder). `zoom` lets a tap open it full size. */
   function photo(item, { zoom = true, cls = 'th' } = {}) {
-    const src = Core.photo(item);
+    const src = Core.photoUrl(item);
     if (!src) return `<span class="noph ${cls}">▦</span>`;
     return `<img class="${cls}" loading="lazy" alt="" src="${src}"${zoom ? ` data-zoom="${item.sku}"` : ''}>`;
   }
@@ -1633,7 +1656,7 @@ const UI = (() => {
       const z = e.target.closest('[data-zoom]');
       if (!z) return;
       e.stopPropagation(); e.preventDefault();
-      $('#lightbox img').src = Core.photo(Core.item(z.dataset.zoom));
+      $('#lightbox img').src = Core.photoUrl(Core.item(z.dataset.zoom));
       $('#lightbox').classList.add('on');
     }, true);
     $('#lightbox').addEventListener('click', () => $('#lightbox').classList.remove('on'));
@@ -2081,6 +2104,10 @@ const Printout = (() => {
     daftra: { excluded: { out: new Set(), in: new Set(), return: new Set(), add: new Set(), adjust: new Set() }, voucher: '', open: null, menu: false },
   };
 
+  /** Search boxes redraw once typing pauses (not on every key), so typing stays smooth. */
+  let typingTimer = null;
+  const afterTyping = (fn, ms = 140) => { clearTimeout(typingTimer); typingTimer = setTimeout(fn, ms); };
+
   /* ======================= 2. templates ================================= */
 
   const itemCell = i => `<div class="item-cell">${photo(i)}<div class="two"><b>${esc(i.name)}</b><code>${i.sku}</code></div></div>`;
@@ -2249,10 +2276,11 @@ const Printout = (() => {
 
     bind() {
       const input = $('#deskSearch');
-      input.oninput = () => { this.s.query = input.value; render({ focus: '#deskSearch' }); };
+      input.oninput = () => { this.s.query = input.value; afterTyping(() => render({ focus: '#deskSearch' })); };
       input.onkeydown = e => {
         if (e.key !== 'Enter' && !(e.key === 'Tab' && this.s.query.trim())) return;
         e.preventDefault();
+        clearTimeout(typingTimer);
         const hit = Core.findByBarcode(this.s.query) || this.products()[0];
         if (!hit) return UI.toast('ما لكيت مادة', 'bad');
         this.s.query = '';
@@ -2331,7 +2359,7 @@ const Printout = (() => {
 
     bind() {
       const input = $('#tableSearch');
-      input.oninput = () => { this.s.query = input.value; this.s.show = 40; render({ focus: '#tableSearch' }); };
+      input.oninput = () => { this.s.query = input.value; this.s.show = 40; afterTyping(() => render({ focus: '#tableSearch' })); };
     },
 
     actions: {
@@ -2437,7 +2465,7 @@ const Printout = (() => {
 
     bind() {
       const input = $('#transferSearch');
-      input.oninput = () => { this.s.query = input.value; render({ focus: '#transferSearch' }); };
+      input.oninput = () => { this.s.query = input.value; afterTyping(() => render({ focus: '#transferSearch' })); };
     },
 
     actions: {
